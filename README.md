@@ -63,4 +63,5 @@ Caddy), который терминирует TLS и передаёт `X-Real-IP
 
 ## Лицензия
 
-MIT — см. [LICENSE](LICENSE).
+MIT — см. [LICENSE](LICENSE). Вендорённые библиотеки и их лицензии перечислены
+в [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
