@@ -89,6 +89,29 @@ sudo ./deploy/bootstrap-rupochta-rf.sh --rename
 
 ---
 
+### Шаги 1–2 одной командой, через Proxmox API
+
+Если до гипервизора есть доступ по HTTPS (порт 8006), переименование и
+установку можно сделать удалённо, без SSH — через API и гостевой агент:
+
+```bash
+export PVE_PASSWORD='...'
+./deploy/pve-remote-provision.py \
+  --host pve.lets-mobile.ru --user claude@lm.local \
+  --vm mail --new-name rupochta-rf --insecure          # сухой прогон
+./deploy/pve-remote-provision.py ... --apply            # выполнить
+```
+
+Скрипт находит гостя по имени или VMID, переименовывает его, забирает
+репозиторий внутрь гостя, запускает `bootstrap-rupochta-rf.sh` и проверяет
+`/health`. Без `--apply` он только показывает, что сделает. Ящики lets-mobile
+удаляются отдельно — `--purge-mailboxes` поверх `--apply`.
+
+Требования: гость запущен, в нём установлен `qemu-guest-agent`, и агент включён
+на ВМ (`qm set <vmid> --agent enabled=1`). Для LXC-контейнера API выполнения
+команд нет — скрипт переименует контейнер и скажет запустить bootstrap внутри
+через `pct enter`.
+
 ## Шаг 3. Сертификат и nginx
 
 После того как `A`-записи резолвятся на эту машину:
@@ -147,15 +170,23 @@ docker exec mailserver setup email add postmaster@xn--80a1acdmd4a.xn--p1ai
 ## Шаг 6. Проверка живого сервиса
 
 ```bash
-curl -fsS https://xn--80a1acdmd4a.xn--p1ai/health     # процесс жив
-curl -fsS https://xn--80a1acdmd4a.xn--p1ai/ready      # IMAP и SMTP отвечают
-curl -fsS https://xn--80a1acdmd4a.xn--p1ai/api/signup/config
+./deploy/verify-rupochta-rf.sh
 ```
 
-Последняя команда должна вернуть `"enabled": true` и
-`"provisioning_ready": true`. Если `provisioning_ready` — `false`, приложение
-не видит локальный почтовый сервер: проверьте `WEBMAIL_LOCAL_MAILSERVER=1`,
-имя контейнера и то, что пользователь `rupochta` состоит в группе `docker`.
+Скрипт проверяет по порядку то, что ломается: делегирование домена, MX, SPF,
+DKIM, DMARC, PTR, сертификат, `/health`, `/ready`, `/api/signup/config` и
+страницу регистрации. Возвращает ненулевой код, если сервис ещё не живой, —
+годится и для мониторинга.
+
+Что означают типичные отказы:
+
+- `A ... missing` — домен не делегирован, это шаг 0;
+- `/ready did not answer` — приложение поднялось, но IMAP или SMTP молчат;
+- `provisioning not ready` — приложение не видит локальный почтовый сервер:
+  проверьте `WEBMAIL_LOCAL_MAILSERVER=1`, имя контейнера и то, что пользователь
+  `rupochta` состоит в группе `docker`;
+- предупреждения про DKIM/SPF/PTR — сервис работает, но исходящая почта будет
+  попадать в спам.
 
 Дальше — вручную, один раз:
 
