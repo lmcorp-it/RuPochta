@@ -28,4 +28,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Воркер отдаёт только статику; такая конфигурация без точки входа
+          # поддерживается начиная с wrangler 4, а экшен по умолчанию ставит 3.x.
+          wranglerVersion: "4.118.0"
           command: deploy
