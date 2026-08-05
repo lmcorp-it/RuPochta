@@ -1,0 +1,40 @@
+name: Баг
+description: Что-то работает не так
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Что произошло
+      description: И что вы ожидали вместо этого.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как воспроизвести
+      placeholder: |
+        1. Войти в почту через …
+        2. Открыть письмо с вложением …
+        3. Нажать …
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Где воспроизводится
+      description: Браузер и ОС, либо PWA на телефоне.
+      placeholder: Firefox 130 / Windows 11, или PWA на Android 14
+    validations:
+      required: true
+  - type: input
+    id: mailbox
+    attributes:
+      label: Почтовый сервис
+      description: Свой IMAP, Яндекс, Mail.ru, VK — если это относится к делу.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи или ошибки консоли
+      description: Уберите адреса, пароли и содержимое писем.
+      render: text

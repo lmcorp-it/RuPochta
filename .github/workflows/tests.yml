@@ -1,0 +1,40 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      # The app must import and answer /health with nothing configured.
+      - run: |
+          WEBMAIL_DB=$RUNNER_TEMP/db.sqlite MAIL_ADMIN_KEY=ci WEBMAIL_SECRET_KEY=ci-secret \
+            python -m uvicorn rupochta_server:app --host 127.0.0.1 --port 18400 &
+          for i in $(seq 30); do
+            curl -fsS http://127.0.0.1:18400/health && exit 0
+            sleep 1
+          done
+          echo "the app did not answer /health" >&2
+          exit 1

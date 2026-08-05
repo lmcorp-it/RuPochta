@@ -1,0 +1,25 @@
+name: Идея или доработка
+description: Предложить функциональность
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую задачу это решает
+      description: Опишите ситуацию, а не сразу решение.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Как это могло бы работать
+  - type: dropdown
+    id: help
+    attributes:
+      label: Готовы сделать сами?
+      options:
+        - Да, возьмусь, нужен только отклик по подходу
+        - Помогу с тестированием
+        - Нет, просто предлагаю
+    validations:
+      required: true
