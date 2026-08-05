@@ -1,0 +1,97 @@
+name: deploy рупочта.рф
+
+# Runs the deployment from CI instead of from someone's laptop: the runner
+# reaches the Proxmox API, renames the guest, installs the service inside it and
+# checks the result. Manual trigger only — this touches a live mail server.
+#
+# Needs one repository secret:
+#   PVE_PASSWORD — password for the Proxmox login given in `pve_user`
+#
+# Put the workflow behind an environment with required reviewers if you want a
+# second pair of eyes before anything is applied.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pve_host:
+        description: "Proxmox host (host or host:8006)"
+        required: true
+        default: "pve.lets-mobile.ru"
+      pve_user:
+        description: "Proxmox login, e.g. claude@lm.local or root@pam"
+        required: true
+        default: "claude@lm.local"
+      vm:
+        description: "Guest vmid, exact name, or unique name fragment"
+        required: true
+        default: "mail"
+      new_name:
+        description: "New guest name"
+        required: true
+        default: "rupochta-rf"
+      apply:
+        description: "Actually make changes (unchecked = dry run)"
+        type: boolean
+        default: false
+      purge_mailboxes:
+        description: "Also delete the lets-mobile mailboxes — destroys mail"
+        type: boolean
+        default: false
+      insecure_tls:
+        description: "Skip TLS verification (self-signed Proxmox certificate)"
+        type: boolean
+        default: true
+
+# One deployment at a time, and never cancel one midway.
+concurrency:
+  group: deploy-rupochta-rf
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Report what this run will do
+        run: |
+          echo "host:      ${{ inputs.pve_host }}"
+          echo "guest:     ${{ inputs.vm }} -> ${{ inputs.new_name }}"
+          echo "apply:     ${{ inputs.apply }}"
+          echo "purge:     ${{ inputs.purge_mailboxes }}"
+          if [ "${{ inputs.apply }}" != "true" ]; then
+            echo "::notice::Dry run — nothing will be changed."
+          fi
+
+      - name: Provision through the Proxmox API
+        env:
+          PVE_PASSWORD: ${{ secrets.PVE_PASSWORD }}
+        run: |
+          if [ -z "$PVE_PASSWORD" ]; then
+            echo "::error::PVE_PASSWORD secret is not set — add it in Settings → Secrets → Actions"
+            exit 1
+          fi
+          args=(
+            --host "${{ inputs.pve_host }}"
+            --user "${{ inputs.pve_user }}"
+            --vm "${{ inputs.vm }}"
+            --new-name "${{ inputs.new_name }}"
+            --branch "${{ github.ref_name }}"
+            --repo "${{ github.server_url }}/${{ github.repository }}.git"
+          )
+          [ "${{ inputs.apply }}" = "true" ] && args+=(--apply)
+          [ "${{ inputs.purge_mailboxes }}" = "true" ] && args+=(--purge-mailboxes)
+          [ "${{ inputs.insecure_tls }}" = "true" ] && args+=(--insecure)
+          python3 deploy/pve-remote-provision.py "${args[@]}"
+
+      - name: Verify the public service
+        if: inputs.apply
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq dnsutils
+          ./deploy/verify-rupochta-rf.sh || {
+            echo "::warning::The service is not fully live yet — see the failed checks above."
+            echo "::warning::DNS delegation and the TLS certificate are done outside this workflow."
+            exit 0
+          }

@@ -20,6 +20,21 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
 
+  mcp-server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: rupochta-mcp-server/package-lock.json
+      - run: npm ci
+        working-directory: rupochta-mcp-server
+      # Builds, then drives the real MCP protocol against a stand-in RuPochta.
+      - run: npm test
+        working-directory: rupochta-mcp-server
+
   import:
     runs-on: ubuntu-latest
     steps:

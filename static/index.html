@@ -84,10 +84,32 @@
         <div id="login-hint" class="login-hint" aria-live="polite"></div>
       </form>
 
+      <p class="login-hint" id="login-signup-invite" hidden>
+        Нет ящика? <a href="/signup" id="login-signup-link">Завести почту</a>
+      </p>
+
       <footer class="login-footer">
         <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10V7a4 4 0 0 1 8 0v3h1.25A1.75 1.75 0 0 1 19 11.75v7.5A1.75 1.75 0 0 1 17.25 21H6.75A1.75 1.75 0 0 1 5 19.25v-7.5A1.75 1.75 0 0 1 6.75 10H8Zm2 0h4V7a2 2 0 1 0-4 0v3Z"/></svg> TLS-защищённое соединение</span>
         <span>© 2026 RuПочта</span>
       </footer>
+
+      <script>
+        // The invitation only appears where registration is actually open,
+        // so a corporate deployment shows no signup affordance at all.
+        (function () {
+          fetch("/api/signup/config", { headers: { Accept: "application/json" } })
+            .then(function (response) { return response.json(); })
+            .then(function (config) {
+              if (!config || !config.enabled || !config.provisioning_ready) return;
+              var invite = document.getElementById("login-signup-invite");
+              var link = document.getElementById("login-signup-link");
+              if (!invite || !link) return;
+              if (config.domain) link.textContent = "Завести почту @" + config.domain;
+              invite.hidden = false;
+            })
+            .catch(function () { /* login must work even when this probe fails */ });
+        })();
+      </script>
     </section>
   </main>
 </div>
