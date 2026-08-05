@@ -663,7 +663,9 @@ def db_init() -> None:
                 attempts INTEGER NOT NULL DEFAULT 0,
                 last_error TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                sent_at TEXT
+                sent_at TEXT,
+                smtp_host TEXT,
+                smtp_port INTEGER
             )
             """
         )
@@ -684,6 +686,8 @@ def db_init() -> None:
                 "ALTER TABLE scheduled_sends "
                 "ADD COLUMN origin TEXT NOT NULL DEFAULT 'scheduled'"
             )
+        _db_add_column_if_missing(con, "scheduled_sends", "smtp_host", "TEXT")
+        _db_add_column_if_missing(con, "scheduled_sends", "smtp_port", "INTEGER")
         # Snooze queue
         con.execute(
             """
@@ -3964,6 +3968,8 @@ def _insert_scheduled_send(
     status: str = "pending",
     origin: str = "scheduled",
     last_error: Optional[str] = None,
+    smtp_host: Optional[str] = None,
+    smtp_port: Optional[int] = None,
 ) -> int:
     imap_pass_enc = encrypt_secret(imap_pass)
     if not imap_pass_enc:
@@ -3974,8 +3980,9 @@ def _insert_scheduled_send(
             INSERT INTO scheduled_sends
                 (imap_user, from_addr, to_list, cc_list, bcc_list, subject,
                  body_html, body_text, in_reply_to, attachments_json,
-                 imap_pass_enc, scheduled_at, status, last_error, origin)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 imap_pass_enc, scheduled_at, status, last_error, origin,
+                 smtp_host, smtp_port)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 imap_user,
@@ -3993,6 +4000,8 @@ def _insert_scheduled_send(
                 status,
                 (last_error or "")[:500] if last_error else None,
                 origin,
+                smtp_host,
+                smtp_port,
             ),
         )
         con.commit()
@@ -4030,6 +4039,8 @@ def _queue_failed_immediate_send(
         status="failed",
         origin="immediate",
         last_error=error_text,
+        smtp_host=sess.get("smtp_host") or None,
+        smtp_port=sess.get("smtp_port") or None,
     )
 
 
@@ -4100,6 +4111,8 @@ def _deliver_scheduled_send_row(
             row["body_text"] or "",
             row["in_reply_to"],
             attachments,
+            smtp_host=row["smtp_host"] if row["smtp_host"] else None,
+            smtp_port=row["smtp_port"] if row["smtp_port"] else None,
         )
     except Exception as e:
         err = str(e)[:500]
@@ -7084,7 +7097,7 @@ async def mail_sso_callback(request: Request, response: Response):
                     status_code=403,
                 )
             )
-        full_email, password, imap_host, imap_port = binding
+        full_email, password, imap_host, imap_port, smtp_host, smtp_port = binding
         sso_login = full_email.split("@", 1)[0]
         await loop.run_in_executor(
             None,
@@ -7101,6 +7114,10 @@ async def mail_sso_callback(request: Request, response: Response):
         sess_data["auth_source"] = "sso"
         sess_data["sso_subject"] = sso_subject
         sess_data["sso_username"] = str(user.get("username") or "").strip().lower()
+        if smtp_host:
+            sess_data["smtp_host"] = smtp_host
+        if smtp_port:
+            sess_data["smtp_port"] = smtp_port
     except HTTPException:
         raise
     except Exception as exc:
@@ -7284,6 +7301,8 @@ def _mailbox_context_for_request(
                 or email_addr
             ),
             "can_send": True,
+            "smtp_host": sess.get("smtp_host") or None,
+            "smtp_port": sess.get("smtp_port") or None,
         }
     if not raw_context.startswith("shared:"):
         raise HTTPException(status_code=400, detail="Некорректный контекст ящика")
@@ -7323,6 +7342,8 @@ def _mailbox_context_for_request(
         "from_address": email_addr,
         "display_name": str(row.get("display_name") or email_addr),
         "can_send": can_send,
+        "smtp_host": None,
+        "smtp_port": None,
     }
 
 
@@ -7355,6 +7376,8 @@ def _mailbox_context_public(context: Dict[str, Any]) -> Dict[str, Any]:
         "from_address": context["from_address"],
         "display_name": context["display_name"],
         "can_send": bool(context["can_send"]),
+        "smtp_host": context.get("smtp_host"),
+        "smtp_port": context.get("smtp_port"),
     }
 
 
@@ -7950,6 +7973,8 @@ async def api_message_invite_rsvp(
                 body_text,
                 message.get("message_id"),
                 [attachment],
+                smtp_host=context.get("smtp_host"),
+                smtp_port=context.get("smtp_port"),
             ),
         )
     except Exception as e:
@@ -8027,6 +8052,8 @@ async def api_send(request: Request):
                 body_text,
                 payload.get("in_reply_to"),
                 payload.get("attachments"),
+                smtp_host=context.get("smtp_host"),
+                smtp_port=context.get("smtp_port"),
             ),
         )
         draft_deleted = None
@@ -11865,6 +11892,8 @@ async def api_schedule_send(request: Request):
             attachments=payload.get("attachments"),
             scheduled_at=dt.replace(microsecond=0).isoformat(),
             origin="scheduled",
+            smtp_host=sess.get("smtp_host") or None,
+            smtp_port=sess.get("smtp_port") or None,
         )
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
