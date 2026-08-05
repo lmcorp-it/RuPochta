@@ -85,6 +85,23 @@ docker run -p 18400:18400 -v rupochta-data:/data \
   -e MAIL_ADMIN_KEY=... -e WEBMAIL_SECRET_KEY=... rupochta
 ```
 
+### Разработка за 5 минут
+
+Локальный стенд с встроенным IMAP/SMTP-сервером — реальный почтовый сервер не
+нужен. Поднимает RuПочту и [Greenmail](https://greenmail-mail-test.github.io/greenmail/)
+рядом, с преднастроенными демо-ящиками.
+
+```bash
+cp .env.dev.example .env.dev
+docker compose -f docker-compose.dev.yml --env-file .env.dev up --build
+```
+
+Открыть `http://localhost:18400`, войти как `demo@example.local` /
+`demo-password` (заведены также `alice` и `bob`). Отправленные письма
+доставляются локально между этими ящиками. Всё состояние — в томе
+`rupochta-dev-data`; чтобы начать с чистого листа, остановите стенд и
+удалите том: `docker compose -f docker-compose.dev.yml down -v`.
+
 ## Конфигурация
 
 Всё задаётся переменными окружения. Дефолты в репозитории нейтральные
@@ -126,7 +143,8 @@ docker run -p 18400:18400 -v rupochta-data:/data \
 - [ ] OAuth (XOAUTH2) для Яндекс 360 и VK WorkSpace вместо паролей приложений.
 - [ ] Экран подключения внешнего ящика в интерфейсе.
 - [ ] Английская локализация интерфейса.
-- [ ] Готовый `docker compose` с локальным почтовым сервером для разработки.
+- [x] Готовый `docker compose` с локальным почтовым сервером для разработки —
+      см. раздел «Разработка за 5 минут».
 
 ## Присоединяйтесь
 
