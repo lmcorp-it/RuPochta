@@ -2225,13 +2225,13 @@ def _migrate_sqlite_secrets(
                 continue
             columns = {
                 str(row[1])
-                for row in con.execute(f"PRAGMA table_info({table})").fetchall()
+                for row in con.execute(f"PRAGMA table_info([{table}])").fetchall()
             }
             if column not in columns:
                 continue
             rows = con.execute(
-                f"SELECT rowid, {column} FROM {table} "
-                f"WHERE {column} IS NOT NULL AND {column} != ''"
+                f"SELECT rowid, [{column}] FROM [{table}] "
+                f"WHERE [{column}] IS NOT NULL AND [{column}] != ''"
             ).fetchall()
             for rowid, ciphertext in rows:
                 plaintext, key_index = _decrypt_secret_with_keys(
@@ -2250,7 +2250,7 @@ def _migrate_sqlite_secrets(
                     continue
                 replacement = _encrypt_secret_with_key(plaintext, current_key)
                 con.execute(
-                    f"UPDATE {table} SET {column}=? WHERE rowid=?",
+                    f"UPDATE [{table}] SET [{column}]=? WHERE rowid=?",
                     (replacement, rowid),
                 )
                 migrated += 1
