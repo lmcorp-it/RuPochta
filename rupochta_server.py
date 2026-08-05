@@ -66,6 +66,12 @@ except Exception:  # pragma: no cover
     LDAP_AVAILABLE = False
 
 from utils.config import get_env_str, get_env_int, get_env_bool
+from utils.normalization import normalize_email, normalize_domain, normalize_string
+from utils.errors import APIError
+from utils.validation import InputValidator, ValidationError
+from utils.database import DBHelper
+from utils.mail_protocol import IMAPHelper, SMTPHelper
+from utils.authentication import AuthGuard
 
 # ---------------------------------------------------------------------------
 # Configuration
