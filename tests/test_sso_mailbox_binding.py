@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS sso_mailbox_bindings (
     updated_at TEXT NOT NULL,
     imap_host TEXT,
     imap_port INTEGER,
-    provider TEXT
+    provider TEXT,
+    smtp_host TEXT,
+    smtp_port INTEGER
 )
 """
 
@@ -43,7 +45,9 @@ CREATE TABLE IF NOT EXISTS sso_external_mailbox_bindings (
     updated_at TEXT NOT NULL,
     imap_host TEXT NOT NULL,
     imap_port INTEGER NOT NULL,
-    provider TEXT NOT NULL
+    provider TEXT NOT NULL,
+    smtp_host TEXT NOT NULL,
+    smtp_port INTEGER NOT NULL
 )
 """
 
@@ -56,6 +60,15 @@ def _extract_function(name: str) -> str:
     ]
     end = min(position for position in ends if position != -1)
     return SOURCE[start:end]
+
+
+def _db_add_column_if_missing(con, table, column, definition):
+    columns = {
+        str(row[1])
+        for row in con.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in columns:
+        con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def _load_binding_helpers(db_path: str, key: bytes):
@@ -78,6 +91,37 @@ def _load_binding_helpers(db_path: str, key: bytes):
     namespace = {
         "_SECRET_KEY": key,
         "_db_connection": _db_connection,
+        "_db_add_column_if_missing": _db_add_column_if_missing,
+        "EXTERNAL_MAILBOX_PROVIDER_PRESETS": {
+            "yandex": {
+                "name": "Яндекс",
+                "imap_host": "imap.yandex.ru",
+                "imap_port": 993,
+                "smtp_host": "smtp.yandex.ru",
+                "smtp_port": 587,
+            },
+            "yandex360": {
+                "name": "Яндекс 360",
+                "imap_host": "imap.yandex.ru",
+                "imap_port": 993,
+                "smtp_host": "smtp.yandex.ru",
+                "smtp_port": 587,
+            },
+            "mailru": {
+                "name": "Mail.ru",
+                "imap_host": "imap.mail.ru",
+                "imap_port": 993,
+                "smtp_host": "smtp.mail.ru",
+                "smtp_port": 465,
+            },
+            "vk": {
+                "name": "VK WorkSpace",
+                "imap_host": "mail.vk.works",
+                "imap_port": 993,
+                "smtp_host": "mail.vk.works",
+                "smtp_port": 587,
+            },
+        },
         "hashlib": hashlib,
         "hmac": hmac,
         "Optional": Optional,
@@ -93,6 +137,7 @@ def _load_binding_helpers(db_path: str, key: bytes):
     }
     for name in (
         "_sso_binding_subject_hash",
+        "_resolve_provider_hosts",
         "_sso_bindings_put",
         "_sso_binding_put",
         "_sso_binding_drop",
@@ -190,7 +235,7 @@ class SsoMailboxBindingTest(unittest.TestCase):
 
         self.assertEqual(
             self.helpers._sso_binding_lookup("social:yandex:4242"),
-            ("employee.one@example.com", "Mailbox-Secret_2026", None, None),
+            ("employee.one@example.com", "Mailbox-Secret_2026", None, None, None, None),
         )
         rows = self._rows()
         self.assertEqual(len(rows), 1)
@@ -204,7 +249,7 @@ class SsoMailboxBindingTest(unittest.TestCase):
         with sqlite3.connect(":memory:") as con:
             con.execute(BINDING_TABLE)
             con.execute(
-                "INSERT INTO sso_mailbox_bindings VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO sso_mailbox_bindings VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     "external-hash",
                     "person@yandex.ru",
@@ -214,9 +259,11 @@ class SsoMailboxBindingTest(unittest.TestCase):
                     "imap.yandex.ru",
                     993,
                     "yandex",
+                    None,
+                    None,
                 ),
             )
-            namespace = {"sqlite3": sqlite3}
+            namespace = {"sqlite3": sqlite3, "_db_add_column_if_missing": _db_add_column_if_missing}
             exec(  # noqa: S102 - trusted own source
                 _extract_function("_sso_external_bindings_init"),
                 namespace,
@@ -287,7 +334,7 @@ class SsoMailboxBindingTest(unittest.TestCase):
         self.assertEqual(len(self._rows()), 1)
         self.assertEqual(
             self.helpers._sso_binding_lookup("social:vk:7"),
-            ("second@example.com", "Second-Secret_2026", None, None),
+            ("second@example.com", "Second-Secret_2026", None, None, None, None),
         )
 
     def test_binding_status_exposes_provider_metadata_without_the_secret(self):
@@ -376,15 +423,13 @@ class SsoMailboxBindingTest(unittest.TestCase):
             subjects,
             "person@yandex.ru",
             "App-Secret_2026",
-            imap_host="imap.yandex.ru",
-            imap_port=993,
             provider="yandex",
         )
         self.assertEqual(len(self._rows()), 2)
         self.assertEqual(len(self._external_rows()), 2)
         self.assertEqual(
             self.helpers._sso_binding_lookup(subjects[0]),
-            ("person@yandex.ru", "App-Secret_2026", "imap.yandex.ru", 993),
+            ("person@yandex.ru", "App-Secret_2026", "imap.yandex.ru", 993, "smtp.yandex.ru", 587),
         )
         self.assertEqual(self.helpers._sso_bindings_drop_external(subjects, "vk"), 0)
         self.assertTrue(self.helpers._sso_bindings_status(subjects)["bound"])
@@ -394,7 +439,7 @@ class SsoMailboxBindingTest(unittest.TestCase):
         self.assertEqual(len(self._external_rows()), 0)
         self.assertEqual(
             self.helpers._sso_binding_lookup(subjects[0]),
-            ("person@example.com", "Managed-Secret_2026", None, None),
+            ("person@example.com", "Managed-Secret_2026", None, None, None, None),
         )
 
     def test_legacy_singular_disconnect_removes_only_external_binding(self):
@@ -421,7 +466,7 @@ class SsoMailboxBindingTest(unittest.TestCase):
         self.assertEqual(len(self._external_rows()), 0)
         self.assertEqual(
             self.helpers._sso_binding_lookup(subject),
-            ("person@example.com", "Managed-Secret_2026", None, None),
+            ("person@example.com", "Managed-Secret_2026", None, None, None, None),
         )
 
     def test_unknown_subject_and_incomplete_input_are_refused(self):
@@ -451,6 +496,61 @@ class SsoMailboxBindingTest(unittest.TestCase):
 
         # Not a crash and not a half-built session: the caller must fall back.
         self.assertIsNone(self.helpers._sso_binding_lookup("social:vk:7"))
+
+    def test_provider_preset_resolves_endpoints(self):
+        self.helpers._sso_binding_put(
+            "social:yandex:4242",
+            "person@yandex.ru",
+            "App-Secret_2026",
+            provider="yandex",
+        )
+
+        lookup = self.helpers._sso_binding_lookup("social:yandex:4242")
+        self.assertEqual(lookup, (
+            "person@yandex.ru",
+            "App-Secret_2026",
+            "imap.yandex.ru",
+            993,
+            "smtp.yandex.ru",
+            587,
+        ))
+
+    def test_unknown_provider_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "unknown provider"):
+            self.helpers._resolve_provider_hosts("unknown-provider")
+
+    def test_custom_provider_uses_explicit_endpoints(self):
+        self.helpers._sso_binding_put(
+            "social:custom:1",
+            "person@example.org",
+            "App-Secret_2026",
+            provider="custom",
+            imap_host="imap.example.org",
+            imap_port=993,
+            smtp_host="smtp.example.org",
+            smtp_port=465,
+        )
+
+        lookup = self.helpers._sso_binding_lookup("social:custom:1")
+        self.assertEqual(lookup, (
+            "person@example.org",
+            "App-Secret_2026",
+            "imap.example.org",
+            993,
+            "smtp.example.org",
+            465,
+        ))
+
+    def test_external_binding_without_smtp_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "external sso binding requires smtp endpoint"):
+            self.helpers._sso_binding_put(
+                "social:custom:1",
+                "person@example.org",
+                "App-Secret_2026",
+                provider="custom",
+                imap_host="imap.example.org",
+                imap_port=993,
+            )
 
 
 if __name__ == "__main__":
