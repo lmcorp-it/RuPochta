@@ -65,6 +65,9 @@ try:
 except Exception:  # pragma: no cover
     LDAP_AVAILABLE = False
 
+# Import utility modules
+from utils import normalization, errors, database, validation, config as config_utils, authentication, mail_protocol
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -115,7 +118,7 @@ DIRECTORY_COMPANY_ALIASES = {
 
 
 def _canonical_company(value: Any) -> str:
-    clean = re.sub(r"[\s_-]+", " ", str(value or "").strip().lower()).strip()
+    clean = normalization.normalize_company_name(value)
     return DIRECTORY_COMPANY_ALIASES.get(clean) or DIRECTORY_COMPANY_ALIASES.get(
         clean.replace(" ", ""),
         "",
@@ -127,11 +130,12 @@ def _directory_domain_for_company(value: Any) -> str:
 
 
 def _company_for_directory_domain(value: Any) -> str:
-    domain = str(value or "").strip().lower().rstrip(".")
+    domain = normalization.normalize_domain(value)
     return next(
         (company for company, candidate in DIRECTORY_PROFILES.items() if candidate == domain),
         "",
     )
+
 
 
 def _directory_domain_from_dn(value: Any) -> str:
@@ -1047,13 +1051,9 @@ def db_audit_query(
         ).fetchall()
         result = []
         for r in rows:
-            d = dict(r)
-            if d.get("details"):
-                try:
-                    d["details"] = json.loads(d["details"])
-                except Exception:
-                    pass
-            d["ok"] = bool(d["ok"])
+            d = database.db_row_to_dict(r)
+            d["details"] = database.db_parse_json_field(d.get("details"))
+            d["ok"] = database.db_bool_from_int(d.get("ok"))
             result.append(d)
         return result, int(total)
 
@@ -1063,10 +1063,10 @@ def db_audit_query_mailbox(
     hours: int = 72,
     limit: int = 250,
 ) -> List[Dict[str, Any]]:
-    target = str(email_addr or "").strip().lower()
+    target = normalization.normalize_email(email_addr)
     if not target:
         return []
-    local = target.split("@", 1)[0] if "@" in target else target
+    local = validation.extract_email_local(target)
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours or 72)))).replace(microsecond=0).isoformat()
     params: List[Any] = [
         cutoff,
@@ -1094,19 +1094,15 @@ def db_audit_query_mailbox(
         rows = con.execute(query, params).fetchall()
     result: List[Dict[str, Any]] = []
     for row in rows:
-        data = dict(row)
-        if data.get("details"):
-            try:
-                data["details"] = json.loads(data["details"])
-            except Exception:
-                pass
-        data["ok"] = bool(data.get("ok"))
+        data = database.db_row_to_dict(row)
+        data["details"] = database.db_parse_json_field(data.get("details"))
+        data["ok"] = database.db_bool_from_int(data.get("ok"))
         result.append(data)
     return result
 
 
 def db_get_mailbox_lifecycle(email_addr: str) -> Optional[Dict[str, Any]]:
-    target = str(email_addr or "").strip().lower()
+    target = normalization.normalize_email(email_addr)
     if not target:
         return None
     with _db_connection() as con:
@@ -1119,9 +1115,9 @@ def db_get_mailbox_lifecycle(email_addr: str) -> Optional[Dict[str, Any]]:
         ).fetchone()
         if not row:
             return None
-        data = dict(row)
-    stored_hash = bool(data.get("suspended_hash"))
-    data["suspended"] = bool(data.get("suspended"))
+        data = database.db_row_to_dict(row)
+    stored_hash = database.db_bool_from_int(data.get("suspended_hash"))
+    data["suspended"] = database.db_bool_from_int(data.get("suspended"))
     data["state"] = "suspended" if data["suspended"] else "active"
     data["has_stored_hash"] = stored_hash
     data.pop("suspended_hash", None)
@@ -1138,10 +1134,10 @@ def db_list_mailbox_lifecycle_states() -> Dict[str, Dict[str, Any]]:
         ).fetchall()
     out: Dict[str, Dict[str, Any]] = {}
     for row in rows:
-        data = dict(row)
-        data["suspended"] = bool(data.get("suspended"))
+        data = database.db_row_to_dict(row)
+        data["suspended"] = database.db_bool_from_int(data.get("suspended"))
         data["state"] = "suspended" if data["suspended"] else "active"
-        out[str(data.get("email") or "").lower()] = data
+        out[normalization.normalize_email(data.get("email") or "")] = data
     return out
 
 
@@ -1151,7 +1147,7 @@ def db_mark_mailbox_suspended(
     admin_user: str,
     reason: str = "",
 ) -> Dict[str, Any]:
-    target = str(email_addr or "").strip().lower()
+    target = normalization.normalize_email(email_addr)
     ts = _utc_now_iso()
     with _db_connection() as con:
         con.execute(
@@ -1177,7 +1173,7 @@ def db_mark_mailbox_suspended(
 
 
 def db_mark_mailbox_restored(email_addr: str, admin_user: str, reason: str = "") -> Dict[str, Any]:
-    target = str(email_addr or "").strip().lower()
+    target = normalization.normalize_email(email_addr)
     ts = _utc_now_iso()
     with _db_connection() as con:
         con.execute(
@@ -1200,7 +1196,7 @@ _mailbox_lifecycle_locks: Dict[str, threading.Lock] = {}
 
 
 def _mailbox_lifecycle_lock(email_addr: str) -> threading.Lock:
-    email = str(email_addr or "").strip().lower()
+    email = normalization.normalize_email(email_addr)
     with _mailbox_lifecycle_locks_guard:
         return _mailbox_lifecycle_locks.setdefault(
             email,
@@ -1492,7 +1488,7 @@ def db_set_user_signature(ad_login: str, signature: str) -> Dict[str, Any]:
 
 
 def db_get_forwarding(imap_user: str) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     with _db_connection() as con:
         con.row_factory = sqlite3.Row
         row = con.execute(
@@ -1515,11 +1511,11 @@ def db_get_forwarding(imap_user: str) -> Dict[str, Any]:
             "updated_at": None,
             "revision": 0,
         }
-    payload = dict(row)
-    payload["enabled"] = bool(payload["enabled"])
-    payload["keep_copy"] = bool(payload["keep_copy"])
-    payload["active"] = bool(payload["active"])
-    payload["revision"] = int(payload["revision"])
+    payload = database.db_row_to_dict(row)
+    payload["enabled"] = database.db_bool_from_int(payload.get("enabled"))
+    payload["keep_copy"] = database.db_bool_from_int(payload.get("keep_copy"))
+    payload["active"] = database.db_bool_from_int(payload.get("active"))
+    payload["revision"] = database.db_int_from_value(payload.get("revision"))
     return payload
 
 
@@ -1529,7 +1525,7 @@ def db_set_forwarding(
     address: str,
     keep_copy: bool,
 ) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     now = datetime.now(timezone.utc).isoformat()
     with _db_connection() as con:
         con.execute(
@@ -1562,7 +1558,7 @@ _sieve_user_locks: Dict[str, Dict[str, Any]] = {}
 
 @contextmanager
 def _sieve_user_lock(imap_user: str):
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     with _sieve_user_locks_guard:
         entry = _sieve_user_locks.get(user)
         if entry is None:
@@ -1591,8 +1587,8 @@ def db_record_forwarding_sync(
     sync_message: str,
     expected_revision: Any = _FORWARDING_REVISION_UNSET,
 ) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
-    message = re.sub(r"[\r\n]+", " ", str(sync_message or "")).strip()[:300]
+    user = normalization.normalize_user(imap_user)
+    message = normalization.normalize_multiline_string(sync_message, max_length=300)
     now = datetime.now(timezone.utc).isoformat()
     with _db_connection() as con:
         if expected_revision is _FORWARDING_REVISION_UNSET:
@@ -1666,7 +1662,7 @@ def _forwarding_public_payload(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def db_get_autoreply(imap_user: str) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     with _db_connection() as con:
         con.row_factory = sqlite3.Row
         row = con.execute(
@@ -1692,11 +1688,11 @@ def db_get_autoreply(imap_user: str) -> Dict[str, Any]:
             "updated_at": None,
             "revision": 0,
         }
-    payload = dict(row)
-    payload["enabled"] = bool(payload["enabled"])
-    payload["repeat_days"] = int(payload["repeat_days"])
-    payload["active"] = bool(payload["active"])
-    payload["revision"] = int(payload["revision"])
+    payload = database.db_row_to_dict(row)
+    payload["enabled"] = database.db_bool_from_int(payload.get("enabled"))
+    payload["repeat_days"] = database.db_int_from_value(payload.get("repeat_days"))
+    payload["active"] = database.db_bool_from_int(payload.get("active"))
+    payload["revision"] = database.db_int_from_value(payload.get("revision"))
     return payload
 
 
@@ -1709,7 +1705,7 @@ def db_set_autoreply(
     end_date: Optional[str],
     repeat_days: int,
 ) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     now = datetime.now(timezone.utc).isoformat()
     with _db_connection() as con:
         con.execute(
