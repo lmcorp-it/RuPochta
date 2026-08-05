@@ -423,6 +423,10 @@ def _sso_external_bindings_init(con: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_sso_external_mailbox_bindings_email "
         "ON sso_external_mailbox_bindings(email)"
     )
+    # Submission endpoint of the external mailbox. Rows written before this
+    # column existed keep NULL and fall back to the provider preset on read.
+    _db_add_column_if_missing(con, "sso_external_mailbox_bindings", "smtp_host", "TEXT")
+    _db_add_column_if_missing(con, "sso_external_mailbox_bindings", "smtp_port", "INTEGER")
     legacy_external = con.execute(
         "SELECT COUNT(*) FROM sso_mailbox_bindings "
         "WHERE imap_host IS NOT NULL "
@@ -2350,6 +2354,8 @@ def _sso_bindings_put(
     imap_host: Optional[str] = None,
     imap_port: Optional[int] = None,
     provider: Optional[str] = None,
+    smtp_host: Optional[str] = None,
+    smtp_port: Optional[int] = None,
 ) -> int:
     subject_hashes = list(dict.fromkeys(
         value for value in (_sso_binding_subject_hash(subject) for subject in subjects) if value
@@ -2364,29 +2370,44 @@ def _sso_bindings_put(
     host_value = str(imap_host or "").strip() or None
     port_value = int(imap_port) if imap_port else None
     provider_value = str(provider or "").strip() or None
+    smtp_host_value = str(smtp_host or "").strip() or None
+    smtp_port_value = int(smtp_port) if smtp_port else None
     external = bool(host_value)
     if external and (not port_value or not provider_value):
         raise ValueError("external sso binding requires endpoint and provider")
+    if smtp_host_value and not smtp_port_value:
+        raise ValueError("smtp_host requires smtp_port")
     table = (
         "sso_external_mailbox_bindings"
         if external
         else "sso_mailbox_bindings"
     )
+    # The submission endpoint only exists on the external table: a managed
+    # mailbox always submits through the deployment's own SMTP.
+    smtp_columns = ", smtp_host, smtp_port" if external else ""
+    smtp_values = ", ?, ?" if external else ""
+    smtp_updates = (
+        ",\n                smtp_host = excluded.smtp_host,"
+        "\n                smtp_port = excluded.smtp_port"
+        if external
+        else ""
+    )
+    smtp_row = (smtp_host_value, smtp_port_value) if external else ()
     with _db_connection() as con:
         con.executemany(
             f"""
             INSERT INTO {table} (
                 subject_hash, email, imap_pass_enc, created_at, updated_at,
-                imap_host, imap_port, provider
+                imap_host, imap_port, provider{smtp_columns}
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?{smtp_values})
             ON CONFLICT(subject_hash) DO UPDATE SET
                 email = excluded.email,
                 imap_pass_enc = excluded.imap_pass_enc,
                 updated_at = excluded.updated_at,
                 imap_host = excluded.imap_host,
                 imap_port = excluded.imap_port,
-                provider = excluded.provider
+                provider = excluded.provider{smtp_updates}
             """,
             [
                 (
@@ -2398,7 +2419,7 @@ def _sso_bindings_put(
                     host_value,
                     port_value,
                     provider_value,
-                )
+                ) + smtp_row
                 for subject_hash in subject_hashes
             ],
         )
@@ -2412,6 +2433,8 @@ def _sso_binding_put(
     imap_host: Optional[str] = None,
     imap_port: Optional[int] = None,
     provider: Optional[str] = None,
+    smtp_host: Optional[str] = None,
+    smtp_port: Optional[int] = None,
 ) -> None:
     _sso_bindings_put(
         [subject],
@@ -2420,6 +2443,8 @@ def _sso_binding_put(
         imap_host=imap_host,
         imap_port=imap_port,
         provider=provider,
+        smtp_host=smtp_host,
+        smtp_port=smtp_port,
     )
 
 
@@ -2475,6 +2500,32 @@ def _resolve_provider_hosts(
     return str(preset["imap_host"]), int(preset["imap_port"])
 
 
+def _resolve_provider_smtp(
+    provider: Optional[str],
+    request_smtp_host: Optional[str] = None,
+    request_smtp_port: Optional[int] = None,
+) -> Tuple[Optional[str], Optional[int]]:
+    """Return the submission host/port for a provider preset.
+
+    Mirrors _resolve_provider_hosts. A custom provider may omit the submission
+    endpoint: without it the deployment's own SMTP is used, which is the old
+    behaviour and stays valid for a mailbox relayed locally.
+    """
+    provider_value = str(provider or "").strip().lower()
+    if not provider_value:
+        return None, None
+    preset = MAIL_PROVIDER_PRESETS.get(provider_value)
+    if not preset:
+        raise ValueError(f"unknown provider: {provider_value}")
+    if provider_value == "custom":
+        host = str(request_smtp_host or "").strip() or None
+        port = int(request_smtp_port) if request_smtp_port else None
+        if host and not port:
+            raise ValueError("custom smtp_host requires smtp_port")
+        return (host, port) if host else (None, None)
+    return str(preset["smtp_host"]), int(preset["smtp_port"])
+
+
 def _sso_bindings_drop_external(subjects, provider: str) -> int:
     subject_hashes = list(dict.fromkeys(
         value for value in (_sso_binding_subject_hash(subject) for subject in subjects) if value
@@ -2491,6 +2542,59 @@ def _sso_bindings_drop_external(subjects, provider: str) -> int:
             (*subject_hashes, provider_value),
         )
         return int(cur.rowcount or 0)
+
+
+def _mailbox_external_row(email: str) -> Optional[Tuple[Any, ...]]:
+    """Return the external binding row for this mailbox address, or None."""
+    normalized = str(email or "").strip().lower()
+    if not normalized:
+        return None
+    with _db_connection() as con:
+        return con.execute(
+            "SELECT imap_host, imap_port, smtp_host, smtp_port, provider "
+            "FROM sso_external_mailbox_bindings WHERE email = ? "
+            "ORDER BY updated_at DESC LIMIT 1",
+            (normalized,),
+        ).fetchone()
+
+
+def _mailbox_imap_endpoint(email: str) -> Tuple[Optional[str], Optional[int]]:
+    """Return the IMAP host/port bound to this mailbox address, or (None, None).
+
+    Every IMAP caller routes through _imap_connect, so resolving the endpoint
+    there is what keeps browsing, search and the sent-copy append pointed at the
+    mailbox the user actually signed in with.
+    """
+    row = _mailbox_external_row(email)
+    if not row:
+        return None, None
+    host = str(row[0] or "").strip() or None
+    port = int(row[1]) if row[1] else None
+    return (host, port) if host and port else (None, None)
+
+
+def _mailbox_submission_endpoint(email: str) -> Tuple[Optional[str], Optional[int]]:
+    """Return the SMTP host/port bound to this mailbox address, or (None, None).
+
+    A managed mailbox has no external binding and submits through the
+    deployment's own SMTP. An external mailbox (ADR-0071) must submit through
+    its own provider: sending a Mail.ru address through the local relay is
+    refused by every receiving side, so the endpoint has to follow the mailbox.
+
+    Rows written before the smtp_* columns existed fall back to the provider
+    preset, which is where the values came from in the first place.
+    """
+    row = _mailbox_external_row(email)
+    if not row:
+        return None, None
+    host = str(row[2] or "").strip() or None
+    port = int(row[3]) if row[3] else None
+    if host and port:
+        return host, port
+    try:
+        return _resolve_provider_smtp(str(row[4] or "") or None)
+    except ValueError:
+        return None, None
 
 
 def _sso_binding_lookup(
@@ -2686,9 +2790,11 @@ def _imap_connect(
     host: Optional[str] = None,
     port: Optional[int] = None,
 ) -> imaplib.IMAP4_SSL:
-    # An explicit host/port overrides the global SpaceWeb config. BYOM external
-    # mailboxes (ADR-0071) are on different IMAP servers; managed @example.com
-    # mailboxes pass None and hit the default.
+    # An explicit host/port overrides the global config. BYOM external
+    # mailboxes (ADR-0071) are on different IMAP servers; managed mailboxes
+    # resolve to nothing here and hit the default.
+    if not (host or port):
+        host, port = _mailbox_imap_endpoint(user)
     imap_host = str(host or "").strip() or CFG.IMAP_HOST
     imap_port = int(port) if port else CFG.IMAP_PORT
     ctx = ssl.create_default_context()
@@ -3915,20 +4021,35 @@ def smtp_send(
     recipients = [r for r in (to + cc + bcc) if r]
     raw = msg.as_bytes()
 
-    # Certificates are verified by default. Only a deployment whose submission
-    # host is a local relay with a self-signed certificate may opt out, and it
-    # has to say so explicitly — an unverified TLS session to a remote provider
-    # would expose the mailbox password this call is about to send.
+    # An external mailbox submits through its own provider; a managed one keeps
+    # the deployment's SMTP.
+    bound_host, bound_port = _mailbox_submission_endpoint(user)
+    smtp_host = bound_host or CFG.SMTP_HOST
+    smtp_port = bound_port or CFG.SMTP_PORT
+    external = bool(bound_host)
+
+    # Certificates are verified by default. Only a deployment whose own
+    # submission host is a local relay with a self-signed certificate may opt
+    # out — an unverified TLS session to a remote provider would expose the
+    # mailbox password this call is about to send, so the opt-out never applies
+    # to an external endpoint.
     ctx = ssl.create_default_context()
-    if not CFG.SMTP_VERIFY_TLS:
+    if not CFG.SMTP_VERIFY_TLS and not external:
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-    with smtplib.SMTP(CFG.SMTP_HOST, CFG.SMTP_PORT, timeout=20) as s:
-        s.ehlo()
-        s.starttls(context=ctx)
-        s.ehlo()
-        s.login(user, password)
-        s.send_message(msg, from_addr=from_addr, to_addrs=recipients)
+
+    # Port 465 is implicit TLS, everything else is STARTTLS on a plain session.
+    if smtp_port == 465:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, context=ctx, timeout=20) as s:
+            s.login(user, password)
+            s.send_message(msg, from_addr=from_addr, to_addrs=recipients)
+    else:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as s:
+            s.ehlo()
+            s.starttls(context=ctx)
+            s.ehlo()
+            s.login(user, password)
+            s.send_message(msg, from_addr=from_addr, to_addrs=recipients)
     result = {
         "smtp_ok": True,
         "smtp_status": "submitted",
@@ -13600,8 +13721,13 @@ class AdminSsoBindingBody(BaseModel):
     imap_host: Optional[str] = None
     imap_port: Optional[int] = None
     provider: Optional[str] = None
+    # Submission endpoint of the same mailbox: an external address has to be
+    # sent through its own provider, not through the local relay.
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
     # For known providers the host/port are taken from MAIL_PROVIDER_PRESETS.
-    # For "custom" the caller must supply imap_host and imap_port.
+    # For "custom" the caller must supply imap_host and imap_port; the
+    # submission endpoint is optional and falls back to the deployment's SMTP.
 
 
 class AdminSsoBindingsBody(BaseModel):
@@ -13611,6 +13737,8 @@ class AdminSsoBindingsBody(BaseModel):
     imap_host: Optional[str] = None
     imap_port: Optional[int] = None
     provider: Optional[str] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
 
 
 class AdminSsoBindingStatusBody(BaseModel):
@@ -15196,6 +15324,9 @@ async def api_admin_sso_binding(body: AdminSsoBindingBody, request: Request):
         imap_host, imap_port = _resolve_provider_hosts(
             provider, body.imap_host, body.imap_port
         )
+        smtp_host, smtp_port = _resolve_provider_smtp(
+            provider, body.smtp_host, body.smtp_port
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if imap_host:
@@ -15228,6 +15359,8 @@ async def api_admin_sso_binding(body: AdminSsoBindingBody, request: Request):
                 imap_host=imap_host,
                 imap_port=imap_port,
                 provider=provider,
+                smtp_host=smtp_host,
+                smtp_port=smtp_port,
             ),
         )
     except ValueError as exc:
@@ -15263,6 +15396,9 @@ async def api_admin_sso_binding_bulk(
         imap_host, imap_port = _resolve_provider_hosts(
             provider, body.imap_host, body.imap_port
         )
+        smtp_host, smtp_port = _resolve_provider_smtp(
+            provider, body.smtp_host, body.smtp_port
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not imap_host or not imap_port or not 1 <= imap_port <= 65535:
@@ -15291,6 +15427,8 @@ async def api_admin_sso_binding_bulk(
             imap_host=imap_host,
             imap_port=imap_port,
             provider=provider,
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
         ),
     )
     return {

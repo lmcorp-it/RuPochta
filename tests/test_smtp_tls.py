@@ -17,8 +17,9 @@ class SmtpTlsVerificationTests(unittest.TestCase):
         self.assertEqual(len(relaxations), 2, "expected exactly the opt-out branch")
         guard = send.split("ctx = ssl.create_default_context()", 1)[1]
         self.assertTrue(
-            guard.lstrip().startswith("if not CFG.SMTP_VERIFY_TLS:"),
-            "the relaxation must sit behind the opt-out flag",
+            guard.lstrip().startswith("if not CFG.SMTP_VERIFY_TLS and not external:"),
+            "the relaxation must sit behind the opt-out flag and never apply "
+            "to an external provider",
         )
 
     def test_external_imap_hosts_are_always_verified(self):
