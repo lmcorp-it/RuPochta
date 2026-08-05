@@ -125,7 +125,8 @@
       <h1>Почта команды —<br>на <b>вашем</b> сервере, <i>без</i> чужих условий</h1>
       <p>Открытый почтовый клиент и админ-панель поверх обычных IMAP и SMTP.
          Писем у себя не хранит, внешних сервисов не требует, ставится за вечер.
-         Лицензия MIT.</p>
+         Веб-интерфейс работает уже сейчас, нативные приложения для Windows,
+         macOS, Linux, Android и iOS — в разработке. Лицензия MIT.</p>
       <div class="cta">
         <a class="btn btn-primary" href="https://github.com/lmcorp-it/RuPochta">Смотреть на GitHub</a>
         <a class="btn btn-ghost" href="#install">Как поставить</a>
@@ -176,15 +177,16 @@
 
 <section class="alt" id="platforms">
   <div class="wrap">
-    <h2>Одна установка — все устройства</h2>
-    <p class="lead">Интерфейс работает как PWA: ярлык, отдельное окно, офлайн-режим и уведомления. Отдельного мобильного приложения не нужно.</p>
+    <h2>На каждой платформе</h2>
+    <p class="lead">Веб-интерфейс работает везде уже сейчас — как PWA, с ярлыком, отдельным окном, офлайн-режимом и уведомлениями. Следом проектируем полноценные нативные приложения с установщиками и системной интеграцией.</p>
     <div class="platforms">
-      <div class="platform"><strong>Windows</strong><span>Chrome, Edge — «Установить приложение»</span></div>
-      <div class="platform"><strong>macOS</strong><span>Safari — «Добавить в Dock»</span></div>
-      <div class="platform"><strong>Linux</strong><span>Ярлык PWA в GNOME и KDE</span></div>
-      <div class="platform"><strong>Android</strong><span>«На главный экран», push-уведомления</span></div>
-      <div class="platform"><strong>iOS / iPadOS</strong><span>Safari — «На экран "Домой"»</span></div>
+      <div class="platform"><strong>Windows</strong><span>PWA сейчас · <em>.msi и .exe в разработке</em></span></div>
+      <div class="platform"><strong>macOS</strong><span>PWA сейчас · <em>.dmg в разработке</em></span></div>
+      <div class="platform"><strong>Linux</strong><span>PWA сейчас · <em>.deb, .rpm, AppImage</em></span></div>
+      <div class="platform"><strong>Android</strong><span>PWA сейчас · <em>нативный клиент в разработке</em></span></div>
+      <div class="platform"><strong>iOS / iPadOS</strong><span>PWA сейчас · <em>нативный клиент в разработке</em></span></div>
     </div>
+    <p style="color:var(--muted);margin-top:22px">Кандидат на стек клиентов — Tauri 2: одна кодовая база даёт десктоп и мобильные сборки поверх готового интерфейса. Решение не принято, аргументы за другой стек ждём в <a href="https://github.com/lmcorp-it/RuPochta/discussions">обсуждениях</a>.</p>
   </div>
 </section>
 
@@ -220,6 +222,10 @@ export MAIL_ADMIN_KEY=... WEBMAIL_SECRET_KEY=...
       <a href="https://github.com/lmcorp-it/RuPochta/labels/providers">
         <strong>Яндекс, Mail.ru, VK</strong>
         <span>Подключение внешних ящиков и отправка через их SMTP.</span>
+      </a>
+      <a href="https://github.com/lmcorp-it/RuPochta/labels/native%20client">
+        <strong>Нативные клиенты</strong>
+        <span>Windows, macOS, Linux, Android, iOS: установщики, автообновление, системная интеграция. Rust, Kotlin, Swift.</span>
       </a>
       <a href="https://github.com/lmcorp-it/RuPochta/issues/6">
         <strong>Проверить на своей системе</strong>

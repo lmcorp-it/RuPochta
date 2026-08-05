@@ -2,7 +2,7 @@
 
 <img src="static/brand/rupochta-wordmark.svg" alt="RuПочта" width="360">
 
-**Открытая почта для команды — на своём сервере, во всех браузерах и на телефоне**
+**Открытая почта для команды — на своём сервере, с приложением на каждой платформе**
 
 [![tests](https://github.com/lmcorp-it/RuPochta/actions/workflows/tests.yml/badge.svg)](https://github.com/lmcorp-it/RuPochta/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-1750d8.svg)](LICENSE)
@@ -26,20 +26,29 @@ RuПочта — open-source замена Outlook Web App, «Почты» Window
 SaaS-сервиса: каталог сотрудников многодоменный, ящики и алиасы заводятся из
 админ-панели, вход — по паролю ящика или через внешний OIDC.
 
-## Одно приложение на всех платформах
+## Платформы
 
-Интерфейс — PWA, поэтому отдельных сборок под каждую систему не нужно:
+Веб-интерфейс работает везде уже сейчас, а полноценные нативные клиенты —
+следующая большая цель проекта. Мы проектируем настоящие приложения с
+установщиками, автообновлением и системной интеграцией, а не ярлык на страницу.
 
-| Платформа | Как пользоваться |
-|---|---|
-| **Windows** | любой браузер; «Установить приложение» в Chrome/Edge даёт окно без адресной строки и ярлык в меню «Пуск» |
-| **macOS** | Safari («Добавить в Dock»), Chrome, Firefox |
-| **Linux** | любой браузер; PWA-ярлык в GNOME/KDE |
-| **Android** | Chrome → «Добавить на главный экран», работает офлайн, push-уведомления |
-| **iOS / iPadOS** | Safari → «На экран "Домой"» |
+| Платформа | Сейчас | В разработке |
+|---|---|---|
+| **Windows** | PWA: «Установить приложение» в Chrome/Edge, ярлык в «Пуск» | нативный клиент, установщики `.msi` и `.exe`, автозапуск, обработчик `mailto:` |
+| **macOS** | PWA: Safari → «Добавить в Dock» | приложение `.app` в `.dmg`, подпись и нотаризация, Центр уведомлений |
+| **Linux** | PWA-ярлык в GNOME и KDE | пакеты `.deb`, `.rpm` и AppImage, интеграция с системным треем |
+| **Android** | PWA: «На главный экран», офлайн, push | нативный клиент, `.apk` и публикация в сторах |
+| **iOS / iPadOS** | PWA: Safari → «На экран "Домой"» | нативный клиент, TestFlight и App Store |
 
-Офлайн-оболочка и кэш — на service worker, уведомления — на Web Push. Разрабатывать
-проект тоже можно с любой из этих систем: нужен только Python 3.11+ и браузер.
+Офлайн-оболочка и кэш — на service worker, уведомления — на Web Push.
+Разрабатывать проект можно с любой из этих систем: нужен только Python 3.11+ и
+браузер.
+
+**Нужны руки на клиентах.** Рассматриваем Tauri 2 — одна кодовая база даёт
+десктоп и мобильные сборки поверх уже готового интерфейса, — но решение не
+принято: аргументы за другой стек примем в
+[обсуждении](https://github.com/lmcorp-it/RuPochta/discussions). Ищем тех, кто
+работал с Rust, Kotlin, Swift или сборкой и подписью установщиков.
 
 ## Что умеет
 
@@ -101,6 +110,17 @@ docker run -p 18400:18400 -v rupochta-data:/data \
 
 Ближайшее, и по каждому пункту нужны руки:
 
+**Нативные клиенты**
+
+- [ ] Выбрать стек и собрать первый десктопный клиент (кандидат — Tauri 2).
+- [ ] Windows: установщики `.msi` и `.exe`, автообновление, `mailto:`.
+- [ ] macOS: `.dmg`, подпись и нотаризация.
+- [ ] Linux: `.deb`, `.rpm`, AppImage.
+- [ ] Android: нативный клиент и публикация.
+- [ ] iOS: нативный клиент, TestFlight и App Store.
+
+**Почта и интеграции**
+
 - [ ] Подключение Яндекс, Яндекс 360, Mail.ru, VK WorkSpace: пресеты хостов и
       per-mailbox SMTP (сейчас отправка идёт только через глобальный SMTP).
 - [ ] OAuth (XOAUTH2) для Яндекс 360 и VK WorkSpace вместо паролей приложений.
@@ -142,8 +162,12 @@ MIT — см. [LICENSE](LICENSE). Вендорённые библиотеки и
 **RuPochta** is an open-source webmail client and admin panel — a self-hosted
 alternative to Outlook Web App and the built-in Windows/mobile mail clients. It
 is a single FastAPI/uvicorn process on top of plain IMAP and SMTP: it stores no
-mail of its own and needs no external service. The UI is a PWA, so Windows,
-macOS, Linux, Android and iOS are covered by one build.
+mail of its own and needs no external service.
+
+The web UI is a PWA and already runs on Windows, macOS, Linux, Android and iOS.
+Full native clients — `.msi`/`.exe`, `.dmg`, `.deb`/`.rpm`/AppImage, Android and
+iOS builds — are the next milestone, and we are looking for people with Rust,
+Kotlin, Swift or installer-packaging experience.
 
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Issues and
 pull requests in English are fine. Licensed under MIT.

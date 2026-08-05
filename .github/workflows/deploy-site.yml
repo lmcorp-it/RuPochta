@@ -1,0 +1,31 @@
+name: deploy site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "wrangler.jsonc"
+      - ".github/workflows/deploy-site.yml"
+  workflow_dispatch:
+
+# Деплой идёт только из main этого репозитория: секреты недоступны сборкам
+# из форков, а pull_request здесь намеренно не используется.
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
