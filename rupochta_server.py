@@ -98,6 +98,41 @@ PORTAL_PROFILE_REQUEST_TIMEOUT = float(
     os.environ.get("PORTAL_PROFILE_REQUEST_TIMEOUT", "2")
 )
 
+# Known external mailbox providers. Provider keys are lower-case identifiers
+# used in `sso_external_mailbox_bindings.provider`; `custom` means the caller
+# supplied explicit IMAP/SMTP endpoints.
+EXTERNAL_MAILBOX_PROVIDER_PRESETS: Dict[str, Dict[str, Any]] = {
+    "yandex": {
+        "name": "Яндекс",
+        "imap_host": "imap.yandex.ru",
+        "imap_port": 993,
+        "smtp_host": "smtp.yandex.ru",
+        "smtp_port": 587,
+    },
+    "yandex360": {
+        "name": "Яндекс 360",
+        "imap_host": "imap.yandex.ru",
+        "imap_port": 993,
+        "smtp_host": "smtp.yandex.ru",
+        "smtp_port": 587,
+    },
+    "mailru": {
+        "name": "Mail.ru",
+        "imap_host": "imap.mail.ru",
+        "imap_port": 993,
+        "smtp_host": "smtp.mail.ru",
+        "smtp_port": 465,
+    },
+    "vk": {
+        "name": "VK WorkSpace",
+        "imap_host": "mail.vk.works",
+        "imap_port": 993,
+        "smtp_host": "mail.vk.works",
+        "smtp_port": 587,
+    },
+}
+
+
 # Sample multi-tenant directory profiles. Override with MAIL_DIRECTORY_PROFILES,
 # a JSON object of {"Company": "ad.domain"}; aliases are derived from the keys.
 DIRECTORY_PROFILES = json.loads(
@@ -2351,6 +2386,37 @@ def _sso_binding_subject_hash(subject: str) -> str:
     ).hexdigest()
 
 
+def _resolve_provider_hosts(
+    provider: Optional[str],
+    imap_host: Optional[str] = None,
+    imap_port: Optional[int] = None,
+    smtp_host: Optional[str] = None,
+    smtp_port: Optional[int] = None,
+) -> Tuple[Optional[str], Optional[int], Optional[str], Optional[int]]:
+    """Resolve preset endpoints for a known provider.
+
+    Returns (imap_host, imap_port, smtp_host, smtp_port). A known preset fills
+    missing values from its configuration; an unknown non-custom provider is
+    rejected. Explicit values always override preset defaults.
+    """
+    provider_value = str(provider or "").strip().lower()
+    explicit_imap_host = str(imap_host or "").strip() or None
+    explicit_imap_port = int(imap_port) if imap_port else None
+    explicit_smtp_host = str(smtp_host or "").strip() or None
+    explicit_smtp_port = int(smtp_port) if smtp_port else None
+    if not provider_value or provider_value == "custom":
+        return explicit_imap_host, explicit_imap_port, explicit_smtp_host, explicit_smtp_port
+    preset = EXTERNAL_MAILBOX_PROVIDER_PRESETS.get(provider_value)
+    if not preset:
+        raise ValueError(f"unknown provider: {provider_value}")
+    return (
+        explicit_imap_host or preset.get("imap_host"),
+        explicit_imap_port or preset.get("imap_port"),
+        explicit_smtp_host or preset.get("smtp_host"),
+        explicit_smtp_port or preset.get("smtp_port"),
+    )
+
+
 def _sso_bindings_put(
     subjects,
     email: str,
@@ -2371,14 +2437,25 @@ def _sso_bindings_put(
     if not encrypted:
         raise RuntimeError("failed to protect the mailbox password")
     now = _utc_now_iso()
-    host_value = str(imap_host or "").strip() or None
-    port_value = int(imap_port) if imap_port else None
     provider_value = str(provider or "").strip() or None
-    smtp_host_value = str(smtp_host or "").strip() or None
-    smtp_port_value = int(smtp_port) if smtp_port else None
+    resolved_imap_host, resolved_imap_port, resolved_smtp_host, resolved_smtp_port = (
+        _resolve_provider_hosts(
+            provider_value,
+            imap_host=imap_host,
+            imap_port=imap_port,
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
+        )
+    )
+    host_value = resolved_imap_host
+    port_value = resolved_imap_port
+    smtp_host_value = resolved_smtp_host
+    smtp_port_value = resolved_smtp_port
     external = bool(host_value)
     if external and (not port_value or not provider_value):
         raise ValueError("external sso binding requires endpoint and provider")
+    if external and (not smtp_host_value or not smtp_port_value):
+        raise ValueError("external sso binding requires smtp endpoint")
     table = (
         "sso_external_mailbox_bindings"
         if external
@@ -15179,9 +15256,14 @@ async def api_admin_sso_binding(body: AdminSsoBindingBody, request: Request):
     # A BYOM binding (ADR-0071) carries its own IMAP endpoint, so the mailbox
     # may be on a foreign domain. A managed @example.com binding keeps the
     # local-part/domain validation that the old behaviour enforced.
-    imap_host = str(body.imap_host or "").strip() or None
-    imap_port = int(body.imap_port) if body.imap_port else None
     provider = str(body.provider or "").strip() or None
+    imap_host, imap_port, smtp_host, smtp_port = _resolve_provider_hosts(
+        provider,
+        imap_host=body.imap_host,
+        imap_port=body.imap_port,
+        smtp_host=body.smtp_host,
+        smtp_port=body.smtp_port,
+    )
     if imap_host:
         email = str(body.email or "").strip().lower()
         if not email or "@" not in email or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
@@ -15212,8 +15294,8 @@ async def api_admin_sso_binding(body: AdminSsoBindingBody, request: Request):
                 imap_host=imap_host,
                 imap_port=imap_port,
                 provider=provider,
-                smtp_host=body.smtp_host,
-                smtp_port=body.smtp_port,
+                smtp_host=smtp_host,
+                smtp_port=smtp_port,
             ),
         )
     except ValueError as exc:
@@ -15236,6 +15318,13 @@ async def api_admin_sso_binding_bulk(
     provider = str(body.provider or "").strip().lower()
     if not re.fullmatch(r"[a-z0-9_-]{1,32}", provider):
         raise HTTPException(status_code=400, detail="provider is required")
+    imap_host, imap_port, smtp_host, smtp_port = _resolve_provider_hosts(
+        provider,
+        imap_host=body.imap_host,
+        imap_port=body.imap_port,
+        smtp_host=body.smtp_host,
+        smtp_port=body.smtp_port,
+    )
     loop = asyncio.get_event_loop()
     if not str(body.password or ""):
         removed = await loop.run_in_executor(
@@ -15244,11 +15333,11 @@ async def api_admin_sso_binding_bulk(
         )
         binding = await loop.run_in_executor(None, lambda: _sso_bindings_status(subjects))
         return {"ok": True, "removed": removed, **binding}
-    imap_host = str(body.imap_host or "").strip().lower()
-    imap_port = int(body.imap_port) if body.imap_port else 0
     email = str(body.email or "").strip().lower()
-    if not imap_host or not 1 <= imap_port <= 65535:
+    if not imap_host or not 1 <= (imap_port or 0) <= 65535:
         raise HTTPException(status_code=400, detail="external IMAP endpoint is required")
+    if not smtp_host or not 1 <= (smtp_port or 0) <= 65535:
+        raise HTTPException(status_code=400, detail="external SMTP endpoint is required")
     if not email or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         raise HTTPException(status_code=400, detail="email must be a valid address")
     try:
@@ -15273,8 +15362,8 @@ async def api_admin_sso_binding_bulk(
             imap_host=imap_host,
             imap_port=imap_port,
             provider=provider,
-            smtp_host=body.smtp_host,
-            smtp_port=body.smtp_port,
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
         ),
     )
     return {
@@ -15285,6 +15374,26 @@ async def api_admin_sso_binding_bulk(
         "provider": provider,
         "email": email,
         "conflict": False,
+    }
+
+
+@app.get("/api/admin/sso_binding/providers")
+async def api_admin_sso_binding_providers(request: Request):
+    """Return supported external mailbox provider presets."""
+    _require_mail_admin_api_access(request)
+    return {
+        "ok": True,
+        "providers": [
+            {
+                "id": key,
+                "name": preset.get("name", key),
+                "imap_host": preset.get("imap_host"),
+                "imap_port": preset.get("imap_port"),
+                "smtp_host": preset.get("smtp_host"),
+                "smtp_port": preset.get("smtp_port"),
+            }
+            for key, preset in EXTERNAL_MAILBOX_PROVIDER_PRESETS.items()
+        ],
     }
 
 
