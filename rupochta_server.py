@@ -415,7 +415,9 @@ def _sso_external_bindings_init(con: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL,
             imap_host TEXT NOT NULL,
             imap_port INTEGER NOT NULL,
-            provider TEXT NOT NULL
+            provider TEXT NOT NULL,
+            smtp_host TEXT NOT NULL,
+            smtp_port INTEGER NOT NULL
         )
         """
     )
@@ -423,6 +425,8 @@ def _sso_external_bindings_init(con: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_sso_external_mailbox_bindings_email "
         "ON sso_external_mailbox_bindings(email)"
     )
+    _db_add_column_if_missing(con, "sso_external_mailbox_bindings", "smtp_host", "TEXT")
+    _db_add_column_if_missing(con, "sso_external_mailbox_bindings", "smtp_port", "INTEGER")
     legacy_external = con.execute(
         "SELECT COUNT(*) FROM sso_mailbox_bindings "
         "WHERE imap_host IS NOT NULL "
@@ -2350,6 +2354,8 @@ def _sso_bindings_put(
     imap_host: Optional[str] = None,
     imap_port: Optional[int] = None,
     provider: Optional[str] = None,
+    smtp_host: Optional[str] = None,
+    smtp_port: Optional[int] = None,
 ) -> int:
     subject_hashes = list(dict.fromkeys(
         value for value in (_sso_binding_subject_hash(subject) for subject in subjects) if value
@@ -2364,6 +2370,8 @@ def _sso_bindings_put(
     host_value = str(imap_host or "").strip() or None
     port_value = int(imap_port) if imap_port else None
     provider_value = str(provider or "").strip() or None
+    smtp_host_value = str(smtp_host or "").strip() or None
+    smtp_port_value = int(smtp_port) if smtp_port else None
     external = bool(host_value)
     if external and (not port_value or not provider_value):
         raise ValueError("external sso binding requires endpoint and provider")
@@ -2377,16 +2385,18 @@ def _sso_bindings_put(
             f"""
             INSERT INTO {table} (
                 subject_hash, email, imap_pass_enc, created_at, updated_at,
-                imap_host, imap_port, provider
+                imap_host, imap_port, provider, smtp_host, smtp_port
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(subject_hash) DO UPDATE SET
                 email = excluded.email,
                 imap_pass_enc = excluded.imap_pass_enc,
                 updated_at = excluded.updated_at,
                 imap_host = excluded.imap_host,
                 imap_port = excluded.imap_port,
-                provider = excluded.provider
+                provider = excluded.provider,
+                smtp_host = excluded.smtp_host,
+                smtp_port = excluded.smtp_port
             """,
             [
                 (
@@ -2398,6 +2408,8 @@ def _sso_bindings_put(
                     host_value,
                     port_value,
                     provider_value,
+                    smtp_host_value,
+                    smtp_port_value,
                 )
                 for subject_hash in subject_hashes
             ],
@@ -2412,6 +2424,8 @@ def _sso_binding_put(
     imap_host: Optional[str] = None,
     imap_port: Optional[int] = None,
     provider: Optional[str] = None,
+    smtp_host: Optional[str] = None,
+    smtp_port: Optional[int] = None,
 ) -> None:
     _sso_bindings_put(
         [subject],
@@ -2420,6 +2434,8 @@ def _sso_binding_put(
         imap_host=imap_host,
         imap_port=imap_port,
         provider=provider,
+        smtp_host=smtp_host,
+        smtp_port=smtp_port,
     )
 
 
@@ -2468,21 +2484,24 @@ def _sso_bindings_drop_external(subjects, provider: str) -> int:
 
 def _sso_binding_lookup(
     subject: str,
-) -> Optional[Tuple[str, str, Optional[str], Optional[int]]]:
-    """Return (email, password, imap_host, imap_port) bound to this subject, or None.
+) -> Optional[Tuple[str, str, Optional[str], Optional[int], Optional[str], Optional[int]]]:
+    """Return (email, password, imap_host, imap_port, smtp_host, smtp_port) bound to this subject, or None.
 
     imap_host/imap_port are None for managed @example.com mailboxes, which fall
-    back to the global SpaceWeb config (ADR-0071).
+    back to the global SpaceWeb config (ADR-0071). smtp_host/smtp_port are
+    only set for BYOM external bindings; managed mailboxes use CFG.SMTP_HOST.
     """
     subject_hash = _sso_binding_subject_hash(subject)
     if not subject_hash:
         return None
     with _db_connection() as con:
         rows = con.execute(
-            "SELECT email, imap_pass_enc, imap_host, imap_port, 0 AS priority "
+            "SELECT email, imap_pass_enc, imap_host, imap_port, 0 AS priority, "
+            "       smtp_host, smtp_port "
             "FROM sso_external_mailbox_bindings WHERE subject_hash = ? "
             "UNION ALL "
-            "SELECT email, imap_pass_enc, imap_host, imap_port, 1 AS priority "
+            "SELECT email, imap_pass_enc, imap_host, imap_port, 1 AS priority, "
+            "       NULL AS smtp_host, NULL AS smtp_port "
             "FROM sso_mailbox_bindings WHERE subject_hash = ? "
             "ORDER BY priority",
             (subject_hash, subject_hash),
@@ -2494,7 +2513,10 @@ def _sso_binding_lookup(
         imap_host = str(row[2] or "").strip() or None
         imap_port_raw = row[3]
         imap_port = int(imap_port_raw) if imap_port_raw else None
-        return str(row[0] or ""), password, imap_host, imap_port
+        smtp_host = str(row[5] or "").strip() or None
+        smtp_port_raw = row[6]
+        smtp_port = int(smtp_port_raw) if smtp_port_raw else None
+        return str(row[0] or ""), password, imap_host, imap_port, smtp_host, smtp_port
     return None
 
 
@@ -2515,7 +2537,8 @@ def _sso_bindings_status(subjects) -> dict:
     placeholders = ",".join("?" for _value in subject_hashes)
     with _db_connection() as con:
         rows = con.execute(
-            "SELECT subject_hash, email, imap_pass_enc, imap_host, imap_port, provider "
+            "SELECT subject_hash, email, imap_pass_enc, imap_host, imap_port, provider, "
+            f"       smtp_host, smtp_port "
             f"FROM sso_external_mailbox_bindings "
             f"WHERE subject_hash IN ({placeholders})",
             subject_hashes,
@@ -3869,6 +3892,8 @@ def smtp_send(
     body_text: str,
     in_reply_to: Optional[str] = None,
     attachments: Optional[List[Dict[str, Any]]] = None,
+    smtp_host: Optional[str] = None,
+    smtp_port: Optional[int] = None,
 ) -> Dict[str, Any]:
     msg = _build_mail_message(
         from_addr,
@@ -3896,7 +3921,9 @@ def smtp_send(
     if not CFG.SMTP_VERIFY_TLS:
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-    with smtplib.SMTP(CFG.SMTP_HOST, CFG.SMTP_PORT, timeout=20) as s:
+    target_host = str(smtp_host or "").strip() or CFG.SMTP_HOST
+    target_port = int(smtp_port) if smtp_port else CFG.SMTP_PORT
+    with smtplib.SMTP(target_host, target_port, timeout=20) as s:
         s.ehlo()
         s.starttls(context=ctx)
         s.ehlo()
