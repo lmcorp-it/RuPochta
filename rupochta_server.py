@@ -65,6 +65,9 @@ try:
 except Exception:  # pragma: no cover
     LDAP_AVAILABLE = False
 
+# Import utility modules
+from utils import normalization, errors, database, validation, config as config_utils, authentication, mail_protocol
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -115,7 +118,7 @@ DIRECTORY_COMPANY_ALIASES = {
 
 
 def _canonical_company(value: Any) -> str:
-    clean = re.sub(r"[\s_-]+", " ", str(value or "").strip().lower()).strip()
+    clean = normalization.normalize_company_name(value)
     return DIRECTORY_COMPANY_ALIASES.get(clean) or DIRECTORY_COMPANY_ALIASES.get(
         clean.replace(" ", ""),
         "",
@@ -127,11 +130,12 @@ def _directory_domain_for_company(value: Any) -> str:
 
 
 def _company_for_directory_domain(value: Any) -> str:
-    domain = str(value or "").strip().lower().rstrip(".")
+    domain = normalization.normalize_domain(value)
     return next(
         (company for company, candidate in DIRECTORY_PROFILES.items() if candidate == domain),
         "",
     )
+
 
 
 def _directory_domain_from_dn(value: Any) -> str:
@@ -1051,13 +1055,9 @@ def db_audit_query(
         ).fetchall()
         result = []
         for r in rows:
-            d = dict(r)
-            if d.get("details"):
-                try:
-                    d["details"] = json.loads(d["details"])
-                except Exception:
-                    pass
-            d["ok"] = bool(d["ok"])
+            d = database.db_row_to_dict(r)
+            d["details"] = database.db_parse_json_field(d.get("details"))
+            d["ok"] = database.db_bool_from_int(d.get("ok"))
             result.append(d)
         return result, int(total)
 
@@ -1067,10 +1067,10 @@ def db_audit_query_mailbox(
     hours: int = 72,
     limit: int = 250,
 ) -> List[Dict[str, Any]]:
-    target = str(email_addr or "").strip().lower()
+    target = normalization.normalize_email(email_addr)
     if not target:
         return []
-    local = target.split("@", 1)[0] if "@" in target else target
+    local = validation.extract_email_local(target)
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours or 72)))).replace(microsecond=0).isoformat()
     params: List[Any] = [
         cutoff,
@@ -1098,19 +1098,15 @@ def db_audit_query_mailbox(
         rows = con.execute(query, params).fetchall()
     result: List[Dict[str, Any]] = []
     for row in rows:
-        data = dict(row)
-        if data.get("details"):
-            try:
-                data["details"] = json.loads(data["details"])
-            except Exception:
-                pass
-        data["ok"] = bool(data.get("ok"))
+        data = database.db_row_to_dict(row)
+        data["details"] = database.db_parse_json_field(data.get("details"))
+        data["ok"] = database.db_bool_from_int(data.get("ok"))
         result.append(data)
     return result
 
 
 def db_get_mailbox_lifecycle(email_addr: str) -> Optional[Dict[str, Any]]:
-    target = str(email_addr or "").strip().lower()
+    target = normalization.normalize_email(email_addr)
     if not target:
         return None
     with _db_connection() as con:
@@ -1123,9 +1119,9 @@ def db_get_mailbox_lifecycle(email_addr: str) -> Optional[Dict[str, Any]]:
         ).fetchone()
         if not row:
             return None
-        data = dict(row)
-    stored_hash = bool(data.get("suspended_hash"))
-    data["suspended"] = bool(data.get("suspended"))
+        data = database.db_row_to_dict(row)
+    stored_hash = database.db_bool_from_int(data.get("suspended_hash"))
+    data["suspended"] = database.db_bool_from_int(data.get("suspended"))
     data["state"] = "suspended" if data["suspended"] else "active"
     data["has_stored_hash"] = stored_hash
     data.pop("suspended_hash", None)
@@ -1142,10 +1138,10 @@ def db_list_mailbox_lifecycle_states() -> Dict[str, Dict[str, Any]]:
         ).fetchall()
     out: Dict[str, Dict[str, Any]] = {}
     for row in rows:
-        data = dict(row)
-        data["suspended"] = bool(data.get("suspended"))
+        data = database.db_row_to_dict(row)
+        data["suspended"] = database.db_bool_from_int(data.get("suspended"))
         data["state"] = "suspended" if data["suspended"] else "active"
-        out[str(data.get("email") or "").lower()] = data
+        out[normalization.normalize_email(data.get("email") or "")] = data
     return out
 
 
@@ -1155,7 +1151,7 @@ def db_mark_mailbox_suspended(
     admin_user: str,
     reason: str = "",
 ) -> Dict[str, Any]:
-    target = str(email_addr or "").strip().lower()
+    target = normalization.normalize_email(email_addr)
     ts = _utc_now_iso()
     with _db_connection() as con:
         con.execute(
@@ -1181,7 +1177,7 @@ def db_mark_mailbox_suspended(
 
 
 def db_mark_mailbox_restored(email_addr: str, admin_user: str, reason: str = "") -> Dict[str, Any]:
-    target = str(email_addr or "").strip().lower()
+    target = normalization.normalize_email(email_addr)
     ts = _utc_now_iso()
     with _db_connection() as con:
         con.execute(
@@ -1204,7 +1200,7 @@ _mailbox_lifecycle_locks: Dict[str, threading.Lock] = {}
 
 
 def _mailbox_lifecycle_lock(email_addr: str) -> threading.Lock:
-    email = str(email_addr or "").strip().lower()
+    email = normalization.normalize_email(email_addr)
     with _mailbox_lifecycle_locks_guard:
         return _mailbox_lifecycle_locks.setdefault(
             email,
@@ -1496,7 +1492,7 @@ def db_set_user_signature(ad_login: str, signature: str) -> Dict[str, Any]:
 
 
 def db_get_forwarding(imap_user: str) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     with _db_connection() as con:
         con.row_factory = sqlite3.Row
         row = con.execute(
@@ -1519,11 +1515,11 @@ def db_get_forwarding(imap_user: str) -> Dict[str, Any]:
             "updated_at": None,
             "revision": 0,
         }
-    payload = dict(row)
-    payload["enabled"] = bool(payload["enabled"])
-    payload["keep_copy"] = bool(payload["keep_copy"])
-    payload["active"] = bool(payload["active"])
-    payload["revision"] = int(payload["revision"])
+    payload = database.db_row_to_dict(row)
+    payload["enabled"] = database.db_bool_from_int(payload.get("enabled"))
+    payload["keep_copy"] = database.db_bool_from_int(payload.get("keep_copy"))
+    payload["active"] = database.db_bool_from_int(payload.get("active"))
+    payload["revision"] = database.db_int_from_value(payload.get("revision"))
     return payload
 
 
@@ -1533,7 +1529,7 @@ def db_set_forwarding(
     address: str,
     keep_copy: bool,
 ) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     now = datetime.now(timezone.utc).isoformat()
     with _db_connection() as con:
         con.execute(
@@ -1566,7 +1562,7 @@ _sieve_user_locks: Dict[str, Dict[str, Any]] = {}
 
 @contextmanager
 def _sieve_user_lock(imap_user: str):
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     with _sieve_user_locks_guard:
         entry = _sieve_user_locks.get(user)
         if entry is None:
@@ -1595,8 +1591,8 @@ def db_record_forwarding_sync(
     sync_message: str,
     expected_revision: Any = _FORWARDING_REVISION_UNSET,
 ) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
-    message = re.sub(r"[\r\n]+", " ", str(sync_message or "")).strip()[:300]
+    user = normalization.normalize_user(imap_user)
+    message = normalization.normalize_multiline_string(sync_message, max_length=300)
     now = datetime.now(timezone.utc).isoformat()
     with _db_connection() as con:
         if expected_revision is _FORWARDING_REVISION_UNSET:
@@ -1670,7 +1666,7 @@ def _forwarding_public_payload(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def db_get_autoreply(imap_user: str) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     with _db_connection() as con:
         con.row_factory = sqlite3.Row
         row = con.execute(
@@ -1696,11 +1692,11 @@ def db_get_autoreply(imap_user: str) -> Dict[str, Any]:
             "updated_at": None,
             "revision": 0,
         }
-    payload = dict(row)
-    payload["enabled"] = bool(payload["enabled"])
-    payload["repeat_days"] = int(payload["repeat_days"])
-    payload["active"] = bool(payload["active"])
-    payload["revision"] = int(payload["revision"])
+    payload = database.db_row_to_dict(row)
+    payload["enabled"] = database.db_bool_from_int(payload.get("enabled"))
+    payload["repeat_days"] = database.db_int_from_value(payload.get("repeat_days"))
+    payload["active"] = database.db_bool_from_int(payload.get("active"))
+    payload["revision"] = database.db_int_from_value(payload.get("revision"))
     return payload
 
 
@@ -1713,7 +1709,7 @@ def db_set_autoreply(
     end_date: Optional[str],
     repeat_days: int,
 ) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     now = datetime.now(timezone.utc).isoformat()
     with _db_connection() as con:
         con.execute(
@@ -15580,63 +15576,23 @@ def _admin_session_get(token: str) -> Optional[Dict[str, Any]]:
 
 
 def _client_ip(request: Request) -> str:
-    """Real client IP as seen by the trusted reverse proxy.
-
-    Prefer X-Real-IP (nginx sets it to $remote_addr — not client-appendable).
-    Fall back to the LAST X-Forwarded-For hop: nginx uses
-    $proxy_add_x_forwarded_for, which *appends* the real peer, so the rightmost
-    entry is the trusted one. The leftmost entry is fully attacker-controlled
-    and must never be used for authorization (it would defeat
-    _is_internal_client_ip).
-    """
-    real_ip = (request.headers.get("x-real-ip") or "").strip()
-    if real_ip:
-        return real_ip
-    xff = request.headers.get("x-forwarded-for", "")
-    if xff:
-        hops = [p.strip() for p in xff.split(",") if p.strip()]
-        if hops:
-            return hops[-1]
-    if request.client:
-        return request.client.host
-    return ""
+    """Real client IP as seen by the trusted reverse proxy."""
+    return authentication.get_client_ip(request)
 
 
 def _request_is_https(request: Request) -> bool:
-    proto = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip().lower()
-    if proto:
-        return proto == "https"
-    return (request.url.scheme or "").lower() == "https"
+    """Check if request was made over HTTPS."""
+    return authentication.is_request_https(request)
 
 
 def _request_host(request: Request) -> str:
-    forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",", 1)[0].strip()
-    if forwarded_host:
-        return forwarded_host
-    host = (request.headers.get("host") or "").split(",", 1)[0].strip()
-    if host:
-        return host
-    return (request.url.netloc or "").strip()
+    """Extract Host from request headers, handling proxies."""
+    return authentication.get_request_host(request)
 
 
 def _is_internal_client_ip(client_ip: str) -> bool:
-    text = str(client_ip or "").strip()
-    if not text:
-        return False
-    try:
-        addr = ipaddress.ip_address(text)
-    except ValueError:
-        return False
-    internal_networks = (
-        ipaddress.ip_network("127.0.0.0/8"),
-        ipaddress.ip_network("10.0.0.0/8"),
-        ipaddress.ip_network("172.16.0.0/12"),
-        ipaddress.ip_network("192.168.0.0/16"),
-        ipaddress.ip_network("::1/128"),
-        ipaddress.ip_network("fc00::/7"),
-        ipaddress.ip_network("fe80::/10"),
-    )
-    return any(addr in network for network in internal_networks)
+    """Check if IP is in the internal/private range."""
+    return validation.is_internal_client_ip(client_ip)
 
 
 def _ct_eq(provided: str, expected: str) -> bool:
@@ -15677,18 +15633,19 @@ def _require_mail_admin_api_access(request: Request) -> None:
 
 
 def _is_same_origin_admin_request(request: Request) -> bool:
-    expected_host = _request_host(request)
+    """Check if request is same-origin (with fallback to internal IP check)."""
+    expected_host = authentication.get_request_host(request)
     if not expected_host:
-        return _is_internal_client_ip(_client_ip(request))
-    expected_origin = f"{'https' if _request_is_https(request) else 'http'}://{expected_host}"
-    origin = (request.headers.get("origin") or "").split(",", 1)[0].strip()
+        return _is_internal_client_ip(authentication.get_client_ip(request))
+    expected_origin = authentication.build_expected_origin(request)
+    origin = authentication.get_request_origin(request)
     if origin:
         return origin == expected_origin
-    referer = (request.headers.get("referer") or "").strip()
+    referer = authentication.get_request_referer(request)
     if referer:
         return referer == expected_origin or referer.startswith(expected_origin + "/")
     # Keep internal ops/curl flows working even when browsers omit origin headers.
-    return _is_internal_client_ip(_client_ip(request))
+    return _is_internal_client_ip(authentication.get_client_ip(request))
 
 
 # ---------------------------------------------------------------------------
