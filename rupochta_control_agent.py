@@ -259,7 +259,11 @@ printf '%s\n' APPLIED
 
 
 def _mailserver_delete_distribution(alias_login: str) -> tuple[bool, str, str]:
-    return _mailserver_set_distribution(alias_login, []) and (True, f"{alias_login}@{MAIL_DOMAIN}", "deleted") or (False, "", "delete failed")
+    ok, alias_email, _ = _mailserver_set_distribution(alias_login, [])
+    if ok:
+        return True, alias_email, "deleted"
+    else:
+        return False, f"{alias_login}@{MAIL_DOMAIN}", "delete failed"
 
 
 def _mailserver_apply_account_changes() -> tuple[bool, str]:
@@ -429,10 +433,14 @@ def _mailserver_create_account(mail_login: str, password: str) -> tuple[bool, st
                 'mv "$TMP" "$ACC"; echo REMOVED'
             )
             with _mailserver_lock:
-                subprocess.run(
+                result = subprocess.run(
                     ["docker", "exec", "-i", "-e", f"EMAIL={email_addr}", MAILSERVER_CONTAINER, "bash", "-lc", rollback_script],
                     capture_output=True, text=True, timeout=6,
                 )
+                if result.returncode != 0:
+                    error_detail = (result.stderr or result.stdout).strip() or "rollback subprocess failed"
+                    log.error("Rollback failed for %s: %s", email_addr, error_detail)
+                    return False, email_addr, f"apply failed, rollback also failed: {error_detail}"
             return False, email_addr, apply_status
         return True, email_addr, "added"
     return False, email_addr, out or "unexpected create result"

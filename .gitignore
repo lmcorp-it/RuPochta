@@ -7,3 +7,5 @@ __pycache__/
 .venv/
 *.db
 .claude/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
