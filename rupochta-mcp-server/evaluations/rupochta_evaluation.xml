@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Evaluation for rupochta-mcp-server.
+
+  Answers are verified against the deterministic fixture mailbox in
+  test/mock-rupochta.mjs — 25 messages in INBOX, four folders, one filter rule,
+  one reply template and one shared mailbox. Start it the same way the test
+  suite does, point RUPOCHTA_BASE_URL at it, and every answer below is stable.
+
+  Each question needs several tool calls: locate something, open it, then read a
+  detail out of it. All of them are read-only.
+-->
+<evaluation>
+  <qa_pair>
+    <question>In the INBOX there is exactly one message whose subject mentions an invoice. Open that message and report the file name of the attachment it carries.</question>
+    <answer>invoice.csv</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Find the invoice message in the INBOX, download its only attachment, and report the amount recorded for the row ACME-1.</question>
+    <answer>1200</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Locate the message in the INBOX that has an attachment and report the IMAP UID it is addressed by.</question>
+    <answer>1003</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Add up the total message count across every folder in the mailbox and report the sum.</question>
+    <answer>32</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>How many unread messages are sitting in the INBOX?</question>
+    <answer>13</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Exactly one message in the INBOX is starred. Report the UID of that message.</question>
+    <answer>1005</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>The mailbox has a server-side filter rule matching mail from acme.com. Which folder does that rule file matching messages into?</question>
+    <answer>Invoices</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Look up the filter rule that handles Acme mail and report its evaluation priority.</question>
+    <answer>10</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>This account can open one shared mailbox. Report the mailbox_context token that other tools need in order to address it.</question>
+    <answer>shared:4</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read the mailbox settings and report the name of the only stored reply template.</question>
+    <answer>Onboarding</answer>
+  </qa_pair>
+</evaluation>

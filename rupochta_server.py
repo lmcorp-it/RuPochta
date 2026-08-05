@@ -5256,6 +5256,9 @@ class SendBody(BaseModel):
     folder: Optional[str] = None
     in_reply_to: Optional[str] = None
     draft_uid: Optional[str] = None
+    # Send-later reuses this body; without the field pydantic drops it and
+    # /api/scheduled/send can never see a delivery time.
+    scheduled_at: Optional[str] = None
 
 
 class MoveBody(BaseModel):
@@ -6596,6 +6599,7 @@ async def _parse_compose_request(request: Request, draft_mode: bool = False) -> 
         "in_reply_to": form.get("in_reply_to") or None,
         "replace_uid": form.get("replace_uid") or None,
         "draft_uid": form.get("draft_uid") or None,
+        "scheduled_at": form.get("scheduled_at") or None,
         "attachments": [],
     }
     for _, item in form.multi_items():
@@ -6612,6 +6616,7 @@ async def _parse_compose_request(request: Request, draft_mode: bool = False) -> 
         payload.pop("replace_uid", None)
     else:
         payload.pop("draft_uid", None)
+        payload.pop("scheduled_at", None)
     return payload
 
 
