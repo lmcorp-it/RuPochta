@@ -15451,6 +15451,136 @@ async def api_admin_sso_binding_providers(request: Request):
     }
 
 
+class ExternalMailboxBody(BaseModel):
+    """A signed-in user connecting their own external mailbox."""
+
+    provider: str = ""
+    email: str = ""
+    password: str = ""
+    imap_host: Optional[str] = None
+    imap_port: Optional[int] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+
+
+def _external_mailbox_subject(request: Request) -> Tuple[Dict[str, Any], str]:
+    """Return the session and its login subject, or refuse.
+
+    The binding is keyed by the central-auth subject, so a mailbox connected
+    with a password login would have nothing to attach to.
+    """
+    sess = get_session_or_401(request)
+    subject = _mail_sso_subject(sess.get("sso_subject"))
+    if not subject:
+        raise HTTPException(
+            status_code=409,
+            detail="подключение внешнего ящика доступно после входа через SSO",
+        )
+    return sess, subject
+
+
+@app.get("/api/mailbox/external")
+async def api_external_mailbox_state(request: Request):
+    """Return the caller's own external mailbox state and the provider presets."""
+    sess = get_session_or_401(request)
+    subject = _mail_sso_subject(sess.get("sso_subject"))
+    loop = asyncio.get_event_loop()
+    state = (
+        await loop.run_in_executor(None, lambda: _sso_bindings_status([subject]))
+        if subject
+        else {"bound": False, "external": False, "provider": "", "email": "", "conflict": False}
+    )
+    return JSONResponse(
+        {
+            "ok": True,
+            "available": bool(subject),
+            **state,
+            "providers": [
+                {
+                    "id": key,
+                    "name": value["name"],
+                    "imap_host": value["imap_host"],
+                    "imap_port": value["imap_port"],
+                    "smtp_host": value["smtp_host"],
+                    "smtp_port": value["smtp_port"],
+                }
+                for key, value in MAIL_PROVIDER_PRESETS.items()
+            ],
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/mailbox/external")
+async def api_external_mailbox_connect(body: ExternalMailboxBody, request: Request):
+    """Connect an external mailbox to the caller's own login."""
+    _sess, subject = _external_mailbox_subject(request)
+    provider = str(body.provider or "").strip().lower()
+    if not provider or provider not in MAIL_PROVIDER_PRESETS:
+        raise HTTPException(status_code=400, detail="неизвестный почтовый сервис")
+    email = str(body.email or "").strip().lower()
+    if not email or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise HTTPException(status_code=400, detail="укажите адрес ящика целиком")
+    if not str(body.password or ""):
+        raise HTTPException(status_code=400, detail="укажите пароль приложения")
+    try:
+        imap_host, imap_port = _resolve_provider_hosts(
+            provider, body.imap_host, body.imap_port
+        )
+        smtp_host, smtp_port = _resolve_provider_smtp(
+            provider, body.smtp_host, body.smtp_port
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    loop = asyncio.get_event_loop()
+    # Prove the credentials work before storing them, exactly as the admin path
+    # does: a binding that cannot log in is worse than no binding at all.
+    try:
+        await loop.run_in_executor(
+            None,
+            lambda: _imap_connect(
+                email, str(body.password), host=imap_host, port=imap_port
+            ).logout(),
+        )
+    except Exception as exc:
+        log.warning("external mailbox rejected for %s: %s", email, exc)
+        raise _imap_validation_http_error(exc) from exc
+    try:
+        await loop.run_in_executor(
+            None,
+            lambda: _sso_binding_put(
+                subject,
+                email,
+                str(body.password),
+                imap_host=imap_host,
+                imap_port=imap_port,
+                provider=provider,
+                smtp_host=smtp_host,
+                smtp_port=smtp_port,
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "bound": True, "external": True, "provider": provider, "email": email}
+
+
+@app.delete("/api/mailbox/external")
+async def api_external_mailbox_disconnect(request: Request):
+    """Disconnect the caller's external mailbox, keeping the managed one."""
+    _sess, subject = _external_mailbox_subject(request)
+    loop = asyncio.get_event_loop()
+    state = await loop.run_in_executor(None, lambda: _sso_bindings_status([subject]))
+    provider = str(state.get("provider") or "").strip().lower()
+    if not provider:
+        return {"ok": True, "bound": False, "removed": False}
+    # The drop stays provider-scoped: disconnecting an external mailbox must
+    # leave the managed binding alone (ADR-0072).
+    removed = await loop.run_in_executor(
+        None, lambda: _sso_bindings_drop_external([subject], provider)
+    )
+    return {"ok": True, "bound": False, "removed": bool(removed)}
+
+
 @app.post("/api/admin/sso_binding/status")
 async def api_admin_sso_binding_status(
     body: AdminSsoBindingStatusBody,

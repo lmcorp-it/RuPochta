@@ -4340,6 +4340,100 @@ function switchSettingsTab(tab) {
   $$("[data-settings-panel]").forEach((item) => item.classList.toggle("hidden", item.dataset.settingsPanel !== tab));
 }
 
+// External mailbox (ADR-0071): the user connects a foreign mailbox to their own
+// login. Everything here is one round trip to /mailbox/external — the endpoint
+// verifies the credentials against the provider before storing them.
+function renderExternalMailbox(payload) {
+  const select = $("#external-mailbox-provider");
+  const current = $("#external-mailbox-current");
+  const status = $("#external-mailbox-status");
+  const form = $("#external-mailbox-form");
+  if (!select) return;
+  if (!payload.available) {
+    form.classList.add("hidden");
+    current.classList.remove("hidden");
+    current.textContent = "Подключение доступно после входа через внешний аккаунт.";
+    return;
+  }
+  form.classList.remove("hidden");
+  if (!select.options.length) {
+    (payload.providers || []).forEach((provider) => {
+      const option = document.createElement("option");
+      option.value = provider.id;
+      option.textContent = provider.name;
+      select.append(option);
+    });
+  }
+  const connected = Boolean(payload.external && payload.email);
+  current.classList.toggle("hidden", !connected);
+  if (connected) current.textContent = `Подключён ${payload.email}`;
+  $("#external-mailbox-disconnect").classList.toggle("hidden", !connected);
+  $("#external-mailbox-connect").textContent = connected ? "Переподключить" : "Подключить";
+  if (payload.conflict) {
+    status.textContent = "Привязка повреждена — подключите ящик заново.";
+    status.classList.add("warning");
+  }
+  toggleExternalCustomFields();
+}
+
+function toggleExternalCustomFields() {
+  const custom = $("#external-mailbox-provider").value === "custom";
+  $("#external-mailbox-custom").classList.toggle("hidden", !custom);
+}
+
+async function loadExternalMailbox() {
+  try {
+    renderExternalMailbox(await apiFetch("/mailbox/external"));
+  } catch (e) {
+    $("#external-mailbox-status").textContent = e.message || "Не удалось загрузить состояние";
+  }
+}
+
+async function connectExternalMailbox(event) {
+  event.preventDefault();
+  const status = $("#external-mailbox-status");
+  const button = $("#external-mailbox-connect");
+  status.classList.remove("warning");
+  status.textContent = "Проверяем доступ…";
+  button.disabled = true;
+  const body = {
+    provider: $("#external-mailbox-provider").value,
+    email: $("#external-mailbox-email").value.trim(),
+    password: $("#external-mailbox-password").value,
+  };
+  if (body.provider === "custom") {
+    body.imap_host = $("#external-mailbox-imap-host").value.trim();
+    body.imap_port = Number($("#external-mailbox-imap-port").value) || null;
+    body.smtp_host = $("#external-mailbox-smtp-host").value.trim();
+    body.smtp_port = Number($("#external-mailbox-smtp-port").value) || null;
+  }
+  try {
+    await apiFetch("/mailbox/external", { method: "POST", body: JSON.stringify(body) });
+    $("#external-mailbox-password").value = "";
+    status.textContent = "Ящик подключён";
+    await loadExternalMailbox();
+  } catch (e) {
+    status.textContent = e.message || "Не удалось подключить ящик";
+    status.classList.add("warning");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function disconnectExternalMailbox() {
+  const status = $("#external-mailbox-status");
+  status.classList.remove("warning");
+  status.textContent = "Отключаем…";
+  try {
+    await apiFetch("/mailbox/external", { method: "DELETE" });
+    status.textContent = "Ящик отключён";
+    await loadExternalMailbox();
+  } catch (e) {
+    status.textContent = e.message || "Не удалось отключить ящик";
+    status.classList.add("warning");
+  }
+}
+
 function handleSettingsTabKeydown(event) {
   const tabs = Array.from($$(".settings-tab"));
   const current = tabs.indexOf(event.currentTarget);
@@ -4694,6 +4788,7 @@ async function openSettings(trigger = null) {
   state.ui.foldersSettingsLoaded = false;
   state.ui.rulesSettingsLoaded = false;
   setSettingsLoading(true);
+  loadExternalMailbox();
   $("#signature-status").textContent = "";
   $("#template-status").textContent = "";
   $("#forwarding-status").textContent = "Загрузка настройки…";
@@ -5233,6 +5328,9 @@ function bindEvents() {
     navigateWorkspace(fallback);
   });
   $("#btn-settings").addEventListener("click", (event) => openSettings(event.currentTarget));
+  $("#external-mailbox-form").addEventListener("submit", connectExternalMailbox);
+  $("#external-mailbox-disconnect").addEventListener("click", disconnectExternalMailbox);
+  $("#external-mailbox-provider").addEventListener("change", toggleExternalCustomFields);
   $("#user-profile-button").addEventListener("click", (event) => openAccount(event.currentTarget));
   $("#account-profile-form").addEventListener("submit", saveAccountProfile);
   $("#account-avatar-button").addEventListener("click", () => $("#account-avatar-input").click());
