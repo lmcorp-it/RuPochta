@@ -65,6 +65,7 @@ try:
 except Exception:  # pragma: no cover
     LDAP_AVAILABLE = False
 
+from utils.config import get_env_str, get_env_int, get_env_bool
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -145,153 +146,151 @@ class Config:
     PORT = 18400
 
     # Mail server
-    MAIL_HOST = os.environ.get("MAIL_HOST", "127.0.0.1")
-    IMAP_HOST = os.environ.get("MAIL_IMAP_HOST", os.environ.get("IMAP_HOST", MAIL_HOST))
-    IMAP_PORT = int(os.environ.get("MAIL_IMAP_PORT", os.environ.get("IMAP_PORT", "993")))
-    SMTP_HOST = os.environ.get("MAIL_SMTP_HOST", os.environ.get("SMTP_HOST", MAIL_HOST))
-    SMTP_PORT = int(os.environ.get("MAIL_SMTP_PORT", os.environ.get("SMTP_PORT", "587")))
-    SMTP_VERIFY_TLS = os.environ.get("MAIL_SMTP_VERIFY_TLS", "1").strip().lower() not in {
-        "0", "false", "no", "off"
-    }
-    MAIL_DOMAIN = os.environ.get("MAIL_DOMAIN", "example.com")
-    MAIL_PUBLIC_HOST = os.environ.get("MAIL_PUBLIC_HOST", f"mail.{MAIL_DOMAIN}")
-    MAIL_PUBLIC_IMAP_PORT = int(os.environ.get("MAIL_PUBLIC_IMAP_PORT", "993"))
-    MAIL_PUBLIC_SMTP_PORT = int(os.environ.get("MAIL_PUBLIC_SMTP_PORT", "587"))
-    MAIL_WEBMAIL_URL = os.environ.get("MAIL_WEBMAIL_URL", f"https://mail.{MAIL_DOMAIN}")
-    TICKET_INTAKE_URL = os.environ.get(
+    MAIL_HOST = get_env_str("MAIL_HOST", "127.0.0.1")
+    IMAP_HOST = get_env_str("MAIL_IMAP_HOST", get_env_str("IMAP_HOST", MAIL_HOST))
+    IMAP_PORT = get_env_int("MAIL_IMAP_PORT", get_env_int("IMAP_PORT", 993))
+    SMTP_HOST = get_env_str("MAIL_SMTP_HOST", get_env_str("SMTP_HOST", MAIL_HOST))
+    SMTP_PORT = get_env_int("MAIL_SMTP_PORT", get_env_int("SMTP_PORT", 587))
+    SMTP_VERIFY_TLS = get_env_bool("MAIL_SMTP_VERIFY_TLS", True)
+    MAIL_DOMAIN = get_env_str("MAIL_DOMAIN", "example.com")
+    MAIL_PUBLIC_HOST = get_env_str("MAIL_PUBLIC_HOST", f"mail.{MAIL_DOMAIN}")
+    MAIL_PUBLIC_IMAP_PORT = get_env_int("MAIL_PUBLIC_IMAP_PORT", 993)
+    MAIL_PUBLIC_SMTP_PORT = get_env_int("MAIL_PUBLIC_SMTP_PORT", 587)
+    MAIL_WEBMAIL_URL = get_env_str("MAIL_WEBMAIL_URL", f"https://mail.{MAIL_DOMAIN}")
+    TICKET_INTAKE_URL = get_env_str(
         "MAIL_TICKET_INTAKE_URL",
         "http://127.0.0.1:3010/api/it/intake/mail",
-    ).strip()
-    TICKET_INTAKE_SECRET = os.environ.get("INTEGRATION_WEBHOOK_SECRET", "").strip()
-    MANAGED_ADDRESS_WRITE_AUTHORITY = os.environ.get(
+    )
+    TICKET_INTAKE_SECRET = get_env_str("INTEGRATION_WEBHOOK_SECRET", "")
+    MANAGED_ADDRESS_WRITE_AUTHORITY = get_env_bool(
         "MANAGED_ADDRESS_WRITE_AUTHORITY",
-        "0",
-    ).strip().lower() in {"1", "true", "yes", "on"}
-    MAIL_SSO_PUBLIC_URL = os.environ.get("MAIL_SSO_PUBLIC_URL", MAIL_WEBMAIL_URL).rstrip("/")
-    MAIL_SSO_ISSUER = os.environ.get("MAIL_SSO_ISSUER", "").rstrip("/")
-    MAIL_SSO_CLIENT_ID = os.environ.get("MAIL_SSO_CLIENT_ID", os.environ.get("IT_SSO_CLIENT_ID", "")).strip()
-    MAIL_SSO_CLIENT_SECRET = os.environ.get("MAIL_SSO_CLIENT_SECRET", os.environ.get("IT_SSO_CLIENT_SECRET", "")).strip()
-    MAIL_SSO_SCOPE = os.environ.get("MAIL_SSO_SCOPE", "openid email groups").strip()
+        False,
+    )
+    MAIL_SSO_PUBLIC_URL = get_env_str("MAIL_SSO_PUBLIC_URL", MAIL_WEBMAIL_URL).rstrip("/")
+    MAIL_SSO_ISSUER = get_env_str("MAIL_SSO_ISSUER", "").rstrip("/")
+    MAIL_SSO_CLIENT_ID = get_env_str("MAIL_SSO_CLIENT_ID", get_env_str("IT_SSO_CLIENT_ID", ""))
+    MAIL_SSO_CLIENT_SECRET = get_env_str("MAIL_SSO_CLIENT_SECRET", get_env_str("IT_SSO_CLIENT_SECRET", ""))
+    MAIL_SSO_SCOPE = get_env_str("MAIL_SSO_SCOPE", "openid email groups")
     _MAIL_SSO_DEFAULT_ENDPOINTS = _mail_sso_default_endpoints(MAIL_SSO_ISSUER)
-    MAIL_SSO_AUTHORIZATION_ENDPOINT = os.environ.get(
+    MAIL_SSO_AUTHORIZATION_ENDPOINT = get_env_str(
         "MAIL_SSO_AUTHORIZATION_ENDPOINT", _MAIL_SSO_DEFAULT_ENDPOINTS["authorization"]
-    ).strip()
-    MAIL_SSO_TOKEN_ENDPOINT = os.environ.get(
+    )
+    MAIL_SSO_TOKEN_ENDPOINT = get_env_str(
         "MAIL_SSO_TOKEN_ENDPOINT", _MAIL_SSO_DEFAULT_ENDPOINTS["token"]
-    ).strip()
-    MAIL_SSO_USERINFO_ENDPOINT = os.environ.get(
+    )
+    MAIL_SSO_USERINFO_ENDPOINT = get_env_str(
         "MAIL_SSO_USERINFO_ENDPOINT", _MAIL_SSO_DEFAULT_ENDPOINTS["userinfo"]
-    ).strip()
+    )
     MAIL_SSO_STATE_COOKIE = "wmSSOState"
-    MAIL_SSO_PKCE_ENABLED = os.environ.get("MAIL_SSO_PKCE_ENABLED", "1").strip().lower() not in {
-        "0", "false", "no", "off"
-    }
+    MAIL_SSO_PKCE_ENABLED = get_env_bool("MAIL_SSO_PKCE_ENABLED", True)
     MAIL_SSO_PKCE_COOKIE = "__Host-wmSSOPkce"
-    MAIL_SSO_TELEGRAM_IDP_ALIAS = os.environ.get(
+    MAIL_SSO_TELEGRAM_IDP_ALIAS = get_env_str(
         "MAIL_SSO_TELEGRAM_IDP_ALIAS", "telegram"
-    ).strip()
+    )
     MAIL_SSO_TELEGRAM_ACCOUNT_STATE_COOKIE = "__Host-wmSSOTelegramAccountState"
     MAIL_SSO_TELEGRAM_ACCOUNT_PKCE_COOKIE = "__Host-wmSSOTelegramAccountPkce"
     MAIL_SSO_TELEGRAM_ACCOUNT_TTL = 300
-    MAILADMIN_SSO_PUBLIC_URL = os.environ.get(
+    MAILADMIN_SSO_PUBLIC_URL = get_env_str(
         "MAILADMIN_SSO_PUBLIC_URL", "http://127.0.0.1:18400"
     ).rstrip("/")
     MAILADMIN_SSO_PUBLIC_URLS = [
         item.strip().rstrip("/")
-        for item in os.environ.get(
+        for item in get_env_str(
             "MAILADMIN_SSO_PUBLIC_URLS",
             MAILADMIN_SSO_PUBLIC_URL,
         ).split(",")
         if item.strip()
     ]
-    MAILADMIN_SSO_CLIENT_ID = os.environ.get(
+    MAILADMIN_SSO_CLIENT_ID = get_env_str(
         "MAILADMIN_SSO_CLIENT_ID", MAIL_SSO_CLIENT_ID
-    ).strip()
-    MAILADMIN_SSO_CLIENT_SECRET = os.environ.get(
+    )
+    MAILADMIN_SSO_CLIENT_SECRET = get_env_str(
         "MAILADMIN_SSO_CLIENT_SECRET", MAIL_SSO_CLIENT_SECRET
-    ).strip()
-    MAILADMIN_SSO_SCOPE = os.environ.get("MAILADMIN_SSO_SCOPE", MAIL_SSO_SCOPE).strip()
-    MAILADMIN_SSO_AUTHORIZATION_ENDPOINT = os.environ.get(
+    )
+    MAILADMIN_SSO_SCOPE = get_env_str("MAILADMIN_SSO_SCOPE", MAIL_SSO_SCOPE)
+    MAILADMIN_SSO_AUTHORIZATION_ENDPOINT = get_env_str(
         "MAILADMIN_SSO_AUTHORIZATION_ENDPOINT", MAIL_SSO_AUTHORIZATION_ENDPOINT
-    ).strip()
-    MAILADMIN_SSO_TOKEN_ENDPOINT = os.environ.get(
+    )
+    MAILADMIN_SSO_TOKEN_ENDPOINT = get_env_str(
         "MAILADMIN_SSO_TOKEN_ENDPOINT", MAIL_SSO_TOKEN_ENDPOINT
-    ).strip()
-    MAILADMIN_SSO_USERINFO_ENDPOINT = os.environ.get(
+    )
+    MAILADMIN_SSO_USERINFO_ENDPOINT = get_env_str(
         "MAILADMIN_SSO_USERINFO_ENDPOINT", MAIL_SSO_USERINFO_ENDPOINT
-    ).strip()
-    MAILADMIN_SSO_ALLOWED_GROUP = os.environ.get(
+    )
+    MAILADMIN_SSO_ALLOWED_GROUP = get_env_str(
         "MAILADMIN_SSO_ALLOWED_GROUP", ""
-    ).strip()
+    )
     MAILADMIN_SSO_STATE_COOKIE = "jmAdminSSOState"
 
     # AD LDAP
     LDAP_SERVERS = [
         item.strip()
-        for item in os.environ.get(
+        for item in get_env_str(
             "MAILADMIN_LDAPS_URLS",
             "",
         ).split(",")
         if item.strip()
     ]
-    LDAP_BASE_DN = os.environ.get(
+    LDAP_BASE_DN = get_env_str(
         "MAILADMIN_LDAPS_BASE_DN",
         "DC=corp,DC=local",
-    ).strip()
-    LDAP_BIND_USER = os.environ.get(
+    )
+    LDAP_BIND_USER = get_env_str(
         "MAILADMIN_LDAPS_BIND_USER",
         "",
-    ).strip()
-    LDAP_BIND_PASS = os.environ.get("LDAP_BIND_PASS", "")
+    )
+    LDAP_BIND_PASS = get_env_str("LDAP_BIND_PASS", "")
 
     # Proxy panel internal APIs.
-    PROXY_PANEL_URL = os.environ.get("PROXY_PANEL_URL", "")
+    PROXY_PANEL_URL = get_env_str("PROXY_PANEL_URL", "")
     INTERNAL_TOKEN = (
-        os.environ.get("PROXY_PANEL_INTERNAL_TOKEN", "").strip()
-        or os.environ.get("RUPOCHTA_INTERNAL_TOKEN", "").strip()
+        get_env_str("PROXY_PANEL_INTERNAL_TOKEN", "")
+        or get_env_str("RUPOCHTA_INTERNAL_TOKEN", "")
     )
-    PORTAL_EMPLOYEE_DIRECTORY_URL = os.environ.get(
-        "PORTAL_EMPLOYEE_DIRECTORY_URL",
-        "",
-    ).strip() or "http://127.0.0.1:3010/api/it/employees"
-    PORTAL_DIRECTORY_BRIDGE_URL = os.environ.get(
+    PORTAL_EMPLOYEE_DIRECTORY_URL = (
+        get_env_str(
+            "PORTAL_EMPLOYEE_DIRECTORY_URL",
+            "",
+        ) or "http://127.0.0.1:3010/api/it/employees"
+    )
+    PORTAL_DIRECTORY_BRIDGE_URL = get_env_str(
         "PORTAL_DIRECTORY_BRIDGE_URL",
         "",
-    ).strip()
-    PORTAL_PERSONAL_PROFILE_URL = os.environ.get(
+    )
+    PORTAL_PERSONAL_PROFILE_URL = get_env_str(
         "PORTAL_PERSONAL_PROFILE_URL",
         "",
-    ).strip()
-    MAIL_ACCOUNT_CONSOLE_URL = os.environ.get(
+    )
+    MAIL_ACCOUNT_CONSOLE_URL = get_env_str(
         "MAIL_ACCOUNT_CONSOLE_URL",
         "",
-    ).strip()
-    PORTAL_INTEGRATION_SECRET = os.environ.get(
+    )
+    PORTAL_INTEGRATION_SECRET = get_env_str(
         "PORTAL_INTEGRATION_SECRET",
         "",
-    ).strip()
-    PORTAL_MAIL_AUTH_URL = os.environ.get(
+    )
+    PORTAL_MAIL_AUTH_URL = get_env_str(
         "PORTAL_MAIL_AUTH_URL",
         "",
-    ).strip()
-    PORTAL_MAIL_AUTH_HOST = os.environ.get(
+    )
+    PORTAL_MAIL_AUTH_HOST = get_env_str(
         "PORTAL_MAIL_AUTH_HOST",
         "",
-    ).strip()
+    )
     MAIL_TELEGRAM_BROWSER_COOKIE = "wmTelegramBrowser"
-    MAIL_TELEGRAM_BROWSER_TTL = int(
-        os.environ.get("MAIL_TELEGRAM_BROWSER_TTL", str(15 * 60))
+    MAIL_TELEGRAM_BROWSER_TTL = get_env_int(
+        "MAIL_TELEGRAM_BROWSER_TTL", 15 * 60
     )
 
     # Sessions
     SESSION_TTL = 8 * 3600
     SESSION_COOKIE = "wmSID"
-    FOLDERS_CACHE_TTL = int(os.environ.get("WEBMAIL_FOLDERS_CACHE_TTL", "12"))
-    MESSAGES_CACHE_TTL = int(os.environ.get("WEBMAIL_MESSAGES_CACHE_TTL", "6"))
-    MESSAGE_DETAIL_CACHE_TTL = int(os.environ.get("WEBMAIL_MESSAGE_DETAIL_CACHE_TTL", "20"))
+    FOLDERS_CACHE_TTL = get_env_int("WEBMAIL_FOLDERS_CACHE_TTL", 12)
+    MESSAGES_CACHE_TTL = get_env_int("WEBMAIL_MESSAGES_CACHE_TTL", 6)
+    MESSAGE_DETAIL_CACHE_TTL = get_env_int("WEBMAIL_MESSAGE_DETAIL_CACHE_TTL", 20)
 
     # SQLite
-    DB_PATH = os.environ.get(
+    DB_PATH = get_env_str(
         "WEBMAIL_DB",
         "/opt/Project-Tegridy/Project-RuPochta/webmail_aliases.db",
     )
@@ -299,15 +298,15 @@ class Config:
     STATIC_DIR = str(Path(__file__).parent / "static")
 
     # Admin API key (for bot integration)
-    ADMIN_KEY = os.environ.get("MAIL_ADMIN_KEY", "")
+    ADMIN_KEY = get_env_str("MAIL_ADMIN_KEY", "")
 
     # docker-mailserver setup script path on this host
-    MAILSERVER_CONTAINER = os.environ.get("MAILSERVER_CONTAINER", "mailserver").strip()
-    MAILSERVER_ACCOUNTS_FILE = os.environ.get(
+    MAILSERVER_CONTAINER = get_env_str("MAILSERVER_CONTAINER", "mailserver")
+    MAILSERVER_ACCOUNTS_FILE = get_env_str(
         "MAILSERVER_ACCOUNTS_FILE",
         "/srv/mail/mail-server/config/postfix-accounts.cf",
-    ).strip()
-    MAILSERVER_MODE = os.environ.get("WEBMAIL_LOCAL_MAILSERVER", "auto").strip().lower()
+    )
+    MAILSERVER_MODE = get_env_str("WEBMAIL_LOCAL_MAILSERVER", "auto").lower()
     RUNTIME_MODE = os.environ.get("WEBMAIL_RUNTIME_MODE", "").strip().lower()
 
 
