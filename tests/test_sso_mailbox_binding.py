@@ -16,7 +16,7 @@ import unittest
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "rupochta_server.py").read_text(encoding="utf-8")
@@ -58,6 +58,15 @@ def _extract_function(name: str) -> str:
     return SOURCE[start:end]
 
 
+def _load_mail_provider_presets():
+    """Load the MAIL_PROVIDER_PRESETS constant from the server source."""
+    start = SOURCE.index("MAIL_PROVIDER_PRESETS: Dict")
+    end = SOURCE.index("\n\n# ---------------------------------------------------------------------------", start)
+    namespace = {"Dict": Dict, "Any": Any}
+    exec(SOURCE[start:end], namespace)  # noqa: S102 - trusted own source
+    return namespace["MAIL_PROVIDER_PRESETS"]
+
+
 def _load_binding_helpers(db_path: str, key: bytes):
     """Load the binding helpers with a throwaway database and a reversible cipher.
 
@@ -90,6 +99,7 @@ def _load_binding_helpers(db_path: str, key: bytes):
         "_utc_now_iso": lambda: datetime.now(timezone.utc)
         .replace(microsecond=0)
         .isoformat(),
+        "MAIL_PROVIDER_PRESETS": _load_mail_provider_presets(),
     }
     for name in (
         "_sso_binding_subject_hash",
@@ -100,6 +110,7 @@ def _load_binding_helpers(db_path: str, key: bytes):
         "_sso_bindings_drop_external",
         "_sso_binding_lookup",
         "_sso_bindings_status",
+        "_resolve_provider_hosts",
     ):
         exec(_extract_function(name), namespace)  # noqa: S102 - trusted own source
     return types.SimpleNamespace(**namespace)
@@ -423,6 +434,43 @@ class SsoMailboxBindingTest(unittest.TestCase):
             self.helpers._sso_binding_lookup(subject),
             ("person@example.com", "Managed-Secret_2026", None, None),
         )
+
+    def test_known_provider_presets_resolve_to_correct_hosts(self):
+        resolve = self.helpers._resolve_provider_hosts
+        self.assertEqual(
+            resolve("yandex"),
+            ("imap.yandex.ru", 993),
+        )
+        self.assertEqual(
+            resolve("yandex360"),
+            ("imap.yandex.com", 993),
+        )
+        self.assertEqual(
+            resolve("mailru"),
+            ("imap.mail.ru", 993),
+        )
+        self.assertEqual(
+            resolve("vk_workspace"),
+            ("mail.vk.works", 993),
+        )
+        self.assertEqual(
+            resolve("custom", "imap.example.com", 1993),
+            ("imap.example.com", 1993),
+        )
+        # Unknown providers are rejected.
+        with self.assertRaisesRegex(ValueError, "unknown provider"):
+            resolve("unknown_provider")
+        # Custom provider requires explicit host/port.
+        with self.assertRaisesRegex(ValueError, "custom provider requires"):
+            resolve("custom")
+        with self.assertRaisesRegex(ValueError, "custom provider requires"):
+            resolve("custom", "imap.example.com")
+
+    def test_provider_lookup_is_case_and_whitespace_insensitive(self):
+        resolve = self.helpers._resolve_provider_hosts
+        self.assertEqual(resolve("Yandex"), ("imap.yandex.ru", 993))
+        self.assertEqual(resolve("  MAILRU  "), ("imap.mail.ru", 993))
+        self.assertEqual(resolve("Vk_Workspace"), ("mail.vk.works", 993))
 
     def test_unknown_subject_and_incomplete_input_are_refused(self):
         self.assertIsNone(self.helpers._sso_binding_lookup("social:vk:absent"))

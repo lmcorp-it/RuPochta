@@ -2448,6 +2448,33 @@ def _sso_binding_drop_requested(
     return _sso_binding_drop(subject)
 
 
+def _resolve_provider_hosts(
+    provider: Optional[str],
+    request_imap_host: Optional[str] = None,
+    request_imap_port: Optional[int] = None,
+) -> Tuple[Optional[str], Optional[int]]:
+    """Return the IMAP host/port for a provider preset.
+
+    Known providers use the fixed values from MAIL_PROVIDER_PRESETS.
+    The "custom" provider uses the host/port supplied by the caller.
+    Unknown providers or incomplete custom endpoints raise ValueError.
+    """
+    provider_value = str(provider or "").strip().lower()
+    if not provider_value:
+        # Managed mailbox — no per-row host/port.
+        return None, None
+    preset = MAIL_PROVIDER_PRESETS.get(provider_value)
+    if not preset:
+        raise ValueError(f"unknown provider: {provider_value}")
+    if provider_value == "custom":
+        host = str(request_imap_host or "").strip() or None
+        port = int(request_imap_port) if request_imap_port else None
+        if not host or not port:
+            raise ValueError("custom provider requires imap_host and imap_port")
+        return host, port
+    return str(preset["imap_host"]), int(preset["imap_port"])
+
+
 def _sso_bindings_drop_external(subjects, provider: str) -> int:
     subject_hashes = list(dict.fromkeys(
         value for value in (_sso_binding_subject_hash(subject) for subject in subjects) if value
@@ -8209,6 +8236,49 @@ async def api_move(uid: str, body: MoveBody, request: Request):
 
 
 # ---------------------------------------------------------------------------
+# External mailbox provider presets (BYOM, ADR-0071)
+# ---------------------------------------------------------------------------
+
+MAIL_PROVIDER_PRESETS: Dict[str, Dict[str, Any]] = {
+    "yandex": {
+        "name": "Яндекс",
+        "imap_host": "imap.yandex.ru",
+        "imap_port": 993,
+        "smtp_host": "smtp.yandex.ru",
+        "smtp_port": 465,
+    },
+    "yandex360": {
+        "name": "Яндекс 360",
+        "imap_host": "imap.yandex.com",
+        "imap_port": 993,
+        "smtp_host": "smtp.yandex.com",
+        "smtp_port": 465,
+    },
+    "mailru": {
+        "name": "Mail.ru",
+        "imap_host": "imap.mail.ru",
+        "imap_port": 993,
+        "smtp_host": "smtp.mail.ru",
+        "smtp_port": 465,
+    },
+    "vk_workspace": {
+        "name": "VK WorkSpace",
+        "imap_host": "mail.vk.works",
+        "imap_port": 993,
+        "smtp_host": "mail.vk.works",
+        "smtp_port": 465,
+    },
+    "custom": {
+        "name": "Свой IMAP",
+        "imap_host": None,
+        "imap_port": None,
+        "smtp_host": None,
+        "smtp_port": None,
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Managed group, distribution, service, and technical addresses
 # ---------------------------------------------------------------------------
 
@@ -13530,6 +13600,8 @@ class AdminSsoBindingBody(BaseModel):
     imap_host: Optional[str] = None
     imap_port: Optional[int] = None
     provider: Optional[str] = None
+    # For known providers the host/port are taken from MAIL_PROVIDER_PRESETS.
+    # For "custom" the caller must supply imap_host and imap_port.
 
 
 class AdminSsoBindingsBody(BaseModel):
@@ -15119,9 +15191,13 @@ async def api_admin_sso_binding(body: AdminSsoBindingBody, request: Request):
     # A BYOM binding (ADR-0071) carries its own IMAP endpoint, so the mailbox
     # may be on a foreign domain. A managed @example.com binding keeps the
     # local-part/domain validation that the old behaviour enforced.
-    imap_host = str(body.imap_host or "").strip() or None
-    imap_port = int(body.imap_port) if body.imap_port else None
-    provider = str(body.provider or "").strip() or None
+    provider = str(body.provider or "").strip().lower() or None
+    try:
+        imap_host, imap_port = _resolve_provider_hosts(
+            provider, body.imap_host, body.imap_port
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if imap_host:
         email = str(body.email or "").strip().lower()
         if not email or "@" not in email or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
@@ -15182,10 +15258,14 @@ async def api_admin_sso_binding_bulk(
         )
         binding = await loop.run_in_executor(None, lambda: _sso_bindings_status(subjects))
         return {"ok": True, "removed": removed, **binding}
-    imap_host = str(body.imap_host or "").strip().lower()
-    imap_port = int(body.imap_port) if body.imap_port else 0
     email = str(body.email or "").strip().lower()
-    if not imap_host or not 1 <= imap_port <= 65535:
+    try:
+        imap_host, imap_port = _resolve_provider_hosts(
+            provider, body.imap_host, body.imap_port
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not imap_host or not imap_port or not 1 <= imap_port <= 65535:
         raise HTTPException(status_code=400, detail="external IMAP endpoint is required")
     if not email or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         raise HTTPException(status_code=400, detail="email must be a valid address")
@@ -15221,6 +15301,19 @@ async def api_admin_sso_binding_bulk(
         "provider": provider,
         "email": email,
         "conflict": False,
+    }
+
+
+@app.get("/api/admin/sso_binding/providers")
+async def api_admin_sso_binding_providers(request: Request):
+    """Return external mailbox provider presets for the binding UI."""
+    _require_mail_admin_api_access(request)
+    return {
+        "ok": True,
+        "providers": [
+            {"id": key, **value}
+            for key, value in MAIL_PROVIDER_PRESETS.items()
+        ],
     }
 
 
