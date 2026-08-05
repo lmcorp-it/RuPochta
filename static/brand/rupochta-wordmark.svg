@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 64" width="320" height="64" role="img" aria-label="RuPochta">
+  <style>
+    .wm { font: 700 42px/1 "Segoe UI", "Helvetica Neue", Arial, sans-serif; letter-spacing: -0.5px; }
+  </style>
+  <text class="wm" x="0" y="46" fill="#1f66e5">Ru</text>
+  <text class="wm" x="52" y="46" fill="#0b1d45">Pochta</text>
+  <path d="M296 12 L318 24 L296 36 L301 24 Z" fill="#e2172c"/>
+  <path d="M296 12 L301 24 L296 36 L286 24 Z" fill="#1f66e5"/>
+</svg>

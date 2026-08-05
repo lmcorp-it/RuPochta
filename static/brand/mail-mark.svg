@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">RuPochta Mail</title>
+  <desc id="desc">Синий почтовый модуль с красным индикатором маршрута</desc>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#1F66E5"/>
+  <rect x="14" y="18" width="36" height="28" rx="7" fill="#FFFFFF"/>
+  <path d="M17 22.5 32 34l15-11.5" fill="none" stroke="#0B1D45" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M17 42 27.7 31.8M47 42 36.3 31.8" fill="none" stroke="#CBDCF5" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="m47.5 9.5 8 3.2-6.1 5.9-.7-4-4.1-1.2Z" fill="#F04453" stroke="#0B1D45" stroke-width="1.4" stroke-linejoin="round"/>
+</svg>

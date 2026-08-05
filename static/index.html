@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>RuPochta Mail — Рабочая почта</title>
+  <link rel="stylesheet" href="/static/workspace.css?v=20260618c">
+  <link rel="stylesheet" href="/static/style.css?v=20260803-login-banner2">
+  <link rel="stylesheet" href="/static/focus.css?v=20260618c">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0b1d45">
+<link rel="icon" type="image/png" href="/static/brand/icon-192.png">
+<link rel="apple-touch-icon" href="/static/brand/icon-192.png">
+</head>
+<body data-appearance="workspace">
+
+<!-- Login screen -->
+<div id="login-screen" class="login-screen">
+  <header class="mail-services-header">
+    <a class="mail-services-brand" href="/" aria-label="RuPochta — на главную"><img src="/static/brand/rupochta-wordmark.svg" alt="RuPochta"></a>
+  </header>
+  <main class="login-shell" aria-labelledby="login-title">
+    <aside class="login-hero" aria-label="RuPochta Mail">
+      <h1 class="sr-only">Рабочая почта без хаоса</h1>
+      <p class="sr-only">Безопасная корпоративная почта для команды. Письма под контролем, данные под защитой.</p>
+      <img class="login-hero-slide" data-login-hero-slide="1" src="/static/brand/mail-login-organized.webp" alt="">
+    </aside>
+    <section class="login-card">
+      <img class="login-brand-art" src="/static/brand/mail-login-banner.webp?v=20260803-transparent1" alt="">
+
+      <div class="login-intro">
+        <h2 id="login-title">Войти в почту</h2>
+        <p class="login-sub">Используйте удобный способ входа</p>
+      </div>
+
+      <form id="login-form" class="login-form">
+        <div class="social-login" aria-label="Вход через внешний аккаунт">
+          <a class="btn provider-yandex" href="/sso/login?provider=yandex" aria-label="Войти через Яндекс">
+            <span class="provider-logo provider-logo-yandex" aria-hidden="true">Я</span>
+            <span>Яндекс</span>
+          </a>
+          <a class="btn provider-yandex" href="/sso/login?provider=yandex/mail" aria-label="Войти через Яндекс Почта">
+            <span class="provider-logo provider-logo-yandex" aria-hidden="true">Я</span>
+            <span>Яндекс Почта</span>
+          </a>
+          <a class="btn provider-vk" href="/sso/login?provider=vk" aria-label="Войти через VK ID">
+            <span class="provider-logo provider-logo-vk" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false"><path d="M7.1 8.2h2.1c.2 0 .3.1.4.4.5 1.6 1.4 3 1.8 3.3.2.1.3.1.3-.2V8.6c0-.4.1-.5.5-.5h1.7c.3 0 .4.1.4.5v2.3c0 .3.1.4.2.4.1 0 .2-.1.4-.2.9-.9 1.6-2.3 1.8-2.7.1-.3.3-.4.6-.4h2.1c.5 0 .6.2.4.6-.3.7-1.7 2.6-1.7 2.6-.2.3-.2.4 0 .6.2.2.9.9 1.3 1.4.5.6.9 1.1 1 1.4.1.3-.1.5-.5.5h-1.9c-.3 0-.5-.1-.7-.4-.5-.6-1.2-1.4-1.5-1.4-.2 0-.3.1-.3.4v1c0 .3-.1.4-.4.5-.3 0-2.1.1-3.7-1.3-1.8-1.6-2.7-4.7-2.7-4.8-.1-.3.1-.4.4-.4Z"/></svg>
+            </span>
+            <span>VK ID</span>
+          </a>
+          <a class="btn provider-telegram" id="telegram-login-btn" href="/sso/login?provider=telegram" aria-label="Войти через Telegram">
+            <span class="provider-logo provider-logo-telegram" aria-hidden="true">
+              <svg viewBox="0 0 128 128" focusable="false"><defs><linearGradient id="telegram-logo-gradient" x1="50%" x2="50%" y1="0%" y2="99.258%"><stop offset="0%" stop-color="#2aabee"/><stop offset="100%" stop-color="#229ed9"/></linearGradient></defs><circle cx="64" cy="64" r="64" fill="url(#telegram-logo-gradient)"/><path fill="#fff" d="M28.97 63.324c18.657-8.128 31.098-13.487 37.323-16.076 17.774-7.393 21.467-8.677 23.874-8.72.53-.009 1.713.122 2.48.745.648.525.826 1.235.911 1.733.086.498.192 1.633.107 2.519-.963 10.12-5.13 34.678-7.251 46.013-.897 4.796-2.663 6.404-4.374 6.561-3.716.342-6.538-2.456-10.138-4.815-5.633-3.693-8.815-5.991-14.283-9.594-6.319-4.164-2.222-6.453 1.379-10.193.942-.979 17.317-15.874 17.634-17.225.04-.169.077-.799-.297-1.131-.375-.333-.927-.219-1.326-.129-.564.129-9.563 6.077-27 17.844-2.55 1.754-4.864 2.609-6.936 2.564-2.285-.049-6.681-1.292-9.948-2.354-4.008-1.303-7.194-1.992-6.916-4.204.144-1.153 1.731-2.332 4.761-3.537Z"/></svg>
+            </span>
+            <span>Telegram</span>
+          </a>
+        </div>
+
+        <div class="login-divider"><span>или войдите с помощью почты</span></div>
+
+        <div class="login-credentials">
+          <label class="login-field" for="login-email">
+            <span>Рабочий email или логин</span>
+            <input type="text" id="login-email" placeholder="name@example.com" autocomplete="username" required>
+          </label>
+          <label class="login-field" for="login-password">
+            <span>Пароль</span>
+            <span class="login-password-field">
+              <input type="password" id="login-password" autocomplete="current-password" required>
+              <button id="login-password-toggle" type="button" aria-label="Показать пароль" aria-controls="login-password" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-5.25 9.5-5.25S21.5 12 21.5 12 18 17.25 12 17.25 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.4"/></svg>
+              </button>
+            </span>
+          </label>
+        </div>
+        <label class="login-check">
+          <input type="checkbox" id="login-remember" checked>
+          <span>Запомнить вход</span>
+        </label>
+
+        <button type="submit" class="btn btn-primary login-submit">Войти в почту <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></span></button>
+        <div id="login-error" class="error-msg" role="alert"></div>
+        <div id="login-hint" class="login-hint" aria-live="polite"></div>
+      </form>
+
+      <footer class="login-footer">
+        <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10V7a4 4 0 0 1 8 0v3h1.25A1.75 1.75 0 0 1 19 11.75v7.5A1.75 1.75 0 0 1 17.25 21H6.75A1.75 1.75 0 0 1 5 19.25v-7.5A1.75 1.75 0 0 1 6.75 10H8Zm2 0h4V7a2 2 0 1 0-4 0v3Z"/></svg> TLS-защищённое соединение</span>
+        <span>© 2026 RuPochta</span>
+      </footer>
+    </section>
+  </main>
+</div>
+
+<!-- Main app -->
+<div id="app" class="app hidden">
+  <!-- Top bar -->
+  <header id="topbar" class="topbar">
+    <button id="toggle-sidebar" class="icon-btn" title="Меню" aria-label="Открыть меню">☰</button>
+    <button id="btn-mobile-back" class="icon-btn mobile-only" title="Назад">←</button>
+    <a class="brand" href="https://mail.example.com/" aria-label="RuPochta Mail — на главную"><img class="app-brand-mark" src="/static/brand/mail-flight.png" alt=""></a>
+    <div class="topbar-context">
+      <div class="topbar-label">Рабочая очередь</div>
+      <div id="topbar-folder-name" class="topbar-folder-name">Входящие</div>
+    </div>
+    <button id="btn-compose" class="btn btn-primary btn-compose">Написать</button>
+    <div class="topbar-spacer"></div>
+    <div class="user-box">
+      <button id="user-profile-button" class="user-profile-button" type="button" title="Открыть личный кабинет" aria-haspopup="dialog" aria-controls="account-modal">
+        <span id="user-profile-avatar" class="user-profile-avatar" aria-hidden="true">YD</span>
+        <span id="user-email" class="user-email"></span>
+      </button>
+      <button id="btn-settings" class="icon-btn text-action" title="Настройки">Настройки</button>
+      <button id="btn-logout" class="icon-btn text-action" title="Выход">Выйти</button>
+    </div>
+  </header>
+
+  <section id="runtime-banner" class="runtime-banner hidden" aria-live="polite">
+    <div class="runtime-banner-main">
+      <span id="runtime-banner-badge" class="runtime-badge">Backup</span>
+      <div class="runtime-copy">
+        <div id="runtime-banner-title" class="runtime-title">Резервный почтовый контур активен</div>
+        <div id="runtime-banner-text" class="runtime-text">Часть функций может идти через recovery path.</div>
+      </div>
+    </div>
+    <div id="runtime-banner-meta" class="runtime-meta"></div>
+  </section>
+  <div id="lm-workspace-live" class="sr-only" aria-live="polite"></div>
+
+  <!-- Mail shell -->
+  <main class="main">
+    <!-- Sidebar: folders and tools -->
+    <aside id="sidebar" class="sidebar">
+      <div class="section-title mailbox-section-title">Почтовые ящики</div>
+      <div id="mailbox-list" class="mailbox-list" aria-label="Доступные почтовые ящики"></div>
+      <nav id="lm-primary-nav" class="workspace-primary-nav" aria-label="Рабочие разделы">
+        <button id="btn-focus" class="workspace-nav-item active" data-workspace="focus" type="button" aria-current="page">
+          <span>Фокус</span>
+          <span id="focus-nav-count" class="unread-badge hidden">0</span>
+        </button>
+        <button id="btn-mail" class="workspace-nav-item" data-workspace="mail" type="button" aria-current="false"><span>Почта</span></button>
+        <button id="btn-calendar" class="workspace-nav-item" data-workspace="calendar" type="button" aria-current="false"><span>Календарь</span></button>
+        <button id="btn-directory" class="workspace-nav-item" data-workspace="directory" type="button" aria-current="false"><span>Контакты</span></button>
+      </nav>
+      <div class="section-title">Папки</div>
+      <ul id="folder-list" class="folder-list"></ul>
+      <form id="sidebar-folder-create" class="sidebar-folder-create">
+        <input id="sidebar-folder-name" type="text" maxlength="120" placeholder="Новая папка" aria-label="Название новой папки">
+        <button class="mini-btn" type="submit" aria-label="Добавить папку">+</button>
+        <span id="sidebar-folder-status" class="muted" aria-live="polite"></span>
+      </form>
+
+    </aside>
+
+    <section id="focus-workspace" class="focus-workspace" aria-labelledby="focus-title">
+      <header class="focus-header">
+        <div>
+          <div class="pane-kicker">RuPochta Mail</div>
+          <h2 id="focus-title">Фокус</h2>
+          <p id="focus-summary" class="focus-summary">Загружаем рабочую очередь…</p>
+        </div>
+        <div class="focus-header-actions">
+          <span id="focus-updated-at" class="muted" aria-live="polite"></span>
+          <button id="focus-refresh" class="mini-btn" type="button">Обновить</button>
+        </div>
+      </header>
+      <div id="focus-live" class="sr-only" aria-live="polite"></div>
+      <div class="focus-grid">
+        <div class="focus-column focus-column-primary">
+          <section class="focus-section" aria-labelledby="focus-attention-title">
+            <div class="focus-section-head">
+              <h3 id="focus-attention-title">Требуют внимания</h3>
+              <span id="focus-attention-count" class="focus-count">0</span>
+            </div>
+            <div id="focus-attention" class="focus-list"></div>
+          </section>
+          <section class="focus-section" aria-labelledby="focus-invitations-title">
+            <div class="focus-section-head">
+              <h3 id="focus-invitations-title">Приглашения</h3>
+              <span id="focus-invitations-count" class="focus-count">0</span>
+            </div>
+            <div id="focus-invitations" class="focus-list"></div>
+          </section>
+        </div>
+        <div class="focus-column">
+          <section class="focus-section" aria-labelledby="focus-outbox-title">
+            <div class="focus-section-head">
+              <h3 id="focus-outbox-title">Исходящие</h3>
+              <button id="focus-open-outbox" class="focus-link" type="button">Все</button>
+            </div>
+            <div id="focus-outbox" class="focus-list"></div>
+          </section>
+          <section class="focus-section" aria-labelledby="focus-returned-title">
+            <div class="focus-section-head">
+              <h3 id="focus-returned-title">Вернулись</h3>
+              <span id="focus-returned-count" class="focus-count">0</span>
+            </div>
+            <div id="focus-returned" class="focus-list"></div>
+          </section>
+          <section class="focus-section" aria-labelledby="focus-events-title">
+            <div class="focus-section-head">
+              <h3 id="focus-events-title">Ближайшие события</h3>
+              <button id="focus-open-calendar" class="focus-link" type="button">Календарь</button>
+            </div>
+            <div id="focus-events" class="focus-list"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <div id="mail-workspace" class="mail-workspace hidden">
+      <!-- Middle pane: message list -->
+      <section id="message-list-pane" class="message-list-pane">
+      <div class="pane-header">
+        <div class="pane-heading">
+          <div class="pane-kicker">Inbox</div>
+          <h2 id="current-folder-title">Входящие</h2>
+        </div>
+        <div class="pane-actions">
+          <button id="btn-mail-tools-toggle" class="mini-btn" type="button" aria-expanded="false" aria-controls="mail-tools">Фильтры</button>
+          <button id="btn-refresh" class="icon-btn" title="Обновить">↻</button>
+          <span id="message-count" class="muted"></span>
+        </div>
+      </div>
+      <div id="mail-tools" class="mail-tools hidden">
+      <div class="mail-tools-mode-row" aria-label="Режим списка писем">
+        <button id="btn-priority-mode" class="mini-btn active">Priority: вкл</button>
+        <button id="btn-thread-mode" class="mini-btn">Треды: вкл</button>
+      </div>
+      <div class="bulk-toolbar">
+        <label class="bulk-select-all">
+          <input type="checkbox" id="bulk-select-page">
+          <span id="bulk-selected-count">0 выбрано</span>
+        </label>
+        <div id="bulk-actions" class="bulk-actions">
+          <button id="btn-bulk-archive" class="mini-btn">Архив</button>
+          <button id="btn-bulk-read" class="mini-btn">Прочитано</button>
+          <button id="btn-bulk-unread" class="mini-btn">Непрочитано</button>
+          <button id="btn-bulk-star" class="mini-btn">★</button>
+          <button id="btn-bulk-unstar" class="mini-btn">☆</button>
+          <select id="bulk-move-target" class="mini-select">
+            <option value="">Переместить…</option>
+          </select>
+          <button id="btn-bulk-move" class="mini-btn">OK</button>
+          <button id="btn-bulk-delete" class="mini-btn mini-danger">Удалить</button>
+        </div>
+      </div>
+      <div class="search-row">
+        <input type="search" id="search-input" placeholder="Поиск: from:, to:, subject:, unread, flagged, has:attachment">
+        <button id="btn-search-clear" class="mini-btn">Сброс</button>
+        <span id="search-status" class="muted"></span>
+      </div>
+      <div id="priority-row" class="priority-row">
+        <div class="priority-head">
+          <span class="priority-title">Priority Inbox</span>
+          <span id="priority-summary" class="muted"></span>
+        </div>
+        <div class="priority-actions">
+          <button class="filter-chip active" data-priority-focus="all">Все</button>
+          <button class="filter-chip" data-priority-focus="priority">Важные</button>
+          <button class="filter-chip" data-priority-focus="direct">Мне лично</button>
+          <button class="filter-chip" data-priority-focus="unread">Новые</button>
+          <button class="filter-chip" data-priority-focus="attachments">С вложениями</button>
+        </div>
+      </div>
+      <div class="filter-row">
+        <button id="chip-unread" class="filter-chip">Непрочитанные</button>
+        <button id="chip-flagged" class="filter-chip">Со звёздочкой</button>
+        <button id="chip-attachments" class="filter-chip">С вложениями</button>
+      </div>
+      </div>
+      <div id="message-list" class="message-list"></div>
+      <div class="pagination">
+        <button id="prev-page" class="mini-btn">‹ Назад</button>
+        <span id="page-info" class="muted">—</span>
+        <button id="next-page" class="mini-btn">Вперёд ›</button>
+      </div>
+      </section>
+
+      <!-- Resizable splitter between message list and message content -->
+      <button id="pane-splitter" class="pane-splitter" type="button"
+        role="separator" aria-orientation="vertical"
+        aria-label="Изменить ширину списка писем"
+        title="Перетащите, чтобы изменить размер. Двойной клик — сбросить."></button>
+      <!-- Right pane: message body / chat panel -->
+      <section class="message-pane">
+        <div id="message-view" class="message-view empty">
+          <div class="reader-empty-state">
+            <div class="reader-empty-kicker">RuPochta Mail</div>
+            <div class="empty-state">Выберите письмо для просмотра</div>
+            <div class="muted">Откройте письмо слева или начните новое сообщение.</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <nav id="lm-mobile-nav" class="workspace-mobile-nav lm-mobile-nav" aria-label="Быстрая навигация">
+    <button class="lm-mobile-nav-item active" data-workspace="focus" type="button" aria-current="page">Фокус</button>
+    <button class="lm-mobile-nav-item" data-workspace="mail" type="button" aria-current="false">Почта</button>
+    <button class="lm-mobile-nav-item" data-workspace="calendar" type="button" aria-current="false">Календарь</button>
+    <button class="lm-mobile-nav-item" data-workspace="directory" type="button" aria-current="false">Контакты</button>
+  </nav>
+</div>
+
+<!-- Compose modal -->
+<div id="compose-modal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card compose-card">
+    <div class="modal-header">
+      <h3 id="compose-title">Новое письмо</h3>
+      <button class="icon-btn" data-close-modal="compose-modal" aria-label="Закрыть редактор">×</button>
+    </div>
+    <div class="compose-form">
+      <div class="compose-settings">
+      <div id="compose-recovery" class="compose-recovery hidden">
+        <span>Найден локальный черновик после перезагрузки.</span>
+        <div class="compose-recovery-actions">
+          <button id="btn-restore-draft" class="mini-btn">Восстановить</button>
+          <button id="btn-discard-draft" class="mini-btn">Сбросить</button>
+        </div>
+      </div>
+      <div class="compose-headline">
+        <div>
+          <div class="pane-kicker">Compose</div>
+          <div class="compose-from-line">От: <span id="compose-from" class="muted"></span></div>
+        </div>
+        <button id="btn-show-bcc" type="button" class="mini-btn">Показать Bcc</button>
+      </div>
+      <label>Кому
+        <div class="autocomplete-wrap">
+          <input type="text" id="compose-to" autocomplete="off" placeholder="имя или email">
+          <div id="ac-to" class="autocomplete-list hidden"></div>
+        </div>
+        <div id="compose-to-chips" class="recipient-chip-list hidden"></div>
+      </label>
+      <label>Копия
+        <div class="autocomplete-wrap">
+          <input type="text" id="compose-cc" autocomplete="off" placeholder="необязательно">
+          <div id="ac-cc" class="autocomplete-list hidden"></div>
+        </div>
+        <div id="compose-cc-chips" class="recipient-chip-list hidden"></div>
+      </label>
+      <label id="compose-bcc-row" class="hidden">Скрытая копия
+        <div class="autocomplete-wrap">
+          <input type="text" id="compose-bcc" autocomplete="off" placeholder="скрытые получатели">
+          <div id="ac-bcc" class="autocomplete-list hidden"></div>
+        </div>
+        <div id="compose-bcc-chips" class="recipient-chip-list hidden"></div>
+      </label>
+      <div class="compose-tools">
+        <div class="compose-tool-group">
+          <select id="compose-template-select" class="compose-select">
+            <option value="">Шаблон…</option>
+          </select>
+          <button id="btn-compose-apply-template" class="mini-btn">Применить</button>
+        </div>
+        <div class="compose-tool-group">
+          <button id="btn-save-draft" class="mini-btn">Сохранить черновик</button>
+        </div>
+      </div>
+      <div class="compose-invite-box">
+        <label class="compose-invite-toggle">
+          <input type="checkbox" id="compose-invite-enabled">
+          <span>Добавить приглашение в календарь (.ics)</span>
+        </label>
+        <div id="compose-invite-fields" class="compose-invite-fields hidden">
+          <div class="compose-invite-grid">
+            <label>Начало
+              <input type="datetime-local" id="compose-invite-start">
+            </label>
+            <label>Конец
+              <input type="datetime-local" id="compose-invite-end">
+            </label>
+          </div>
+          <label>Место
+            <input type="text" id="compose-invite-location" placeholder="Zoom / офис / переговорка">
+          </label>
+          <label>Описание события
+            <textarea id="compose-invite-description" rows="3" placeholder="Необязательно; если пусто, возьмём текст письма"></textarea>
+          </label>
+          <div id="compose-invite-status" class="muted"></div>
+        </div>
+      </div>
+      <div id="compose-runtime-warning" class="compose-runtime-warning hidden" aria-live="polite"></div>
+      </div>
+      <div class="compose-editor">
+      <label>Тема <input type="text" id="compose-subject"></label>
+      <div class="compose-body-field">
+        <span class="compose-field-label">Текст письма</span>
+        <div class="compose-format-toolbar" role="toolbar" aria-label="Форматирование письма">
+          <button type="button" class="mini-btn" data-compose-command="bold" aria-label="Полужирный"><strong>Ж</strong></button>
+          <button type="button" class="mini-btn" data-compose-command="italic" aria-label="Курсив"><em>К</em></button>
+          <button type="button" class="mini-btn" data-compose-command="underline" aria-label="Подчёркнутый"><u>Ч</u></button>
+          <button type="button" class="mini-btn" data-compose-command="insertUnorderedList" aria-label="Маркированный список">&bull; Список</button>
+          <button type="button" class="mini-btn" data-compose-command="insertOrderedList" aria-label="Нумерованный список">1. Список</button>
+          <button type="button" class="mini-btn" data-compose-command="createLink" aria-label="Добавить ссылку">Ссылка</button>
+          <button type="button" class="mini-btn" id="btn-compose-inline-image">Картинка</button>
+          <input type="file" id="compose-inline-image-input" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden">
+        </div>
+        <div class="compose-template-canvas" aria-label="Стандартный шаблон RuPochta Mail">
+          <div id="compose-body" class="compose-rich-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Текст письма"></div>
+          <div class="compose-brand-logo" aria-label="RuPochta Mail">
+            <img alt="RuPochta">
+            <strong>MAIL</strong>
+          </div>
+        </div>
+      </div>
+      <div class="compose-editor-attachments">
+        <button id="btn-compose-add-attachment" class="mini-btn" type="button">Вложение</button>
+        <input type="file" id="compose-attachments-input" multiple class="hidden">
+        <div id="compose-attachments" class="compose-attachments hidden"></div>
+        <div id="compose-dropzone" class="compose-dropzone">Перетащите вложения сюда или используйте кнопку «Вложение»</div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-send" class="btn btn-primary">Отправить</button>
+        <button class="btn btn-secondary" data-close-modal="compose-modal">Отменить</button>
+        <span id="compose-status" class="muted"></span>
+      </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Canonical RuPochta account, synchronized through the shared account backend. -->
+<div id="account-modal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card account-card" role="dialog" aria-modal="true" aria-labelledby="account-title">
+    <div class="modal-header">
+      <div>
+        <h3 id="account-title">Личный кабинет</h3>
+        <p class="account-sync-note">Синхронизировано с RuPochta ID</p>
+      </div>
+      <button class="icon-btn" data-close-modal="account-modal" aria-label="Закрыть">×</button>
+    </div>
+    <div class="account-body">
+      <div id="account-loading" class="account-loading" aria-live="polite">Загрузка кабинета…</div>
+      <div id="account-content" class="hidden">
+        <section class="account-profile" aria-labelledby="account-personal-title">
+          <div class="account-avatar-column">
+            <button id="account-avatar-button" class="account-avatar" type="button" aria-label="Изменить аватар">YD</button>
+            <input id="account-avatar-input" class="hidden" type="file" accept="image/png,image/jpeg,image/webp">
+            <button id="account-avatar-remove" class="text-button" type="button">Удалить фото</button>
+          </div>
+          <form id="account-profile-form" class="account-profile-form">
+            <h4 id="account-personal-title">Личные данные</h4>
+            <div class="account-name-grid">
+              <label>Фамилия<input id="account-last-name" class="input-plain" maxlength="80" autocomplete="family-name" required></label>
+              <label>Имя<input id="account-first-name" class="input-plain" maxlength="80" autocomplete="given-name" required></label>
+              <label>Отчество<input id="account-middle-name" class="input-plain" maxlength="80" autocomplete="additional-name"></label>
+              <label>Электронная почта<input id="account-email" class="input-plain" type="email" readonly></label>
+            </div>
+            <div class="account-actions">
+              <button id="account-profile-save" class="btn btn-primary" type="submit">Сохранить изменения</button>
+              <span id="account-profile-status" class="muted" aria-live="polite"></span>
+            </div>
+          </form>
+        </section>
+        <section class="account-section" aria-labelledby="account-providers-title">
+          <h4 id="account-providers-title">Способы входа</h4>
+          <div id="account-providers" class="account-providers"></div>
+          <p class="muted account-security-note">Подключённые аккаунты используются только для безопасного входа.</p>
+        </section>
+        <section class="account-section" aria-labelledby="account-password-title">
+          <h4 id="account-password-title">Пароль</h4>
+          <button id="account-password-toggle" class="btn btn-secondary" type="button">Установить пароль</button>
+          <form id="account-password-form" class="account-password-form hidden">
+            <label id="account-current-password-row">Текущий пароль<input id="account-current-password" class="input-plain" type="password" autocomplete="current-password" minlength="8"></label>
+            <label>Новый пароль<input id="account-new-password" class="input-plain" type="password" autocomplete="new-password" minlength="8" required></label>
+            <label>Повторите новый пароль<input id="account-new-password-confirm" class="input-plain" type="password" autocomplete="new-password" minlength="8" required></label>
+            <button class="btn btn-primary" type="submit">Сохранить пароль</button>
+          </form>
+          <p id="account-password-status" class="muted" aria-live="polite"></p>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div id="settings-modal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="modal-header">
+      <h3 id="settings-title">Настройки</h3>
+      <button class="icon-btn" data-close-modal="settings-modal" aria-label="Закрыть">×</button>
+    </div>
+    <div class="settings-tabs" role="tablist" aria-label="Разделы настроек">
+      <button class="settings-tab active" type="button" role="tab" aria-selected="true" aria-controls="settings-panel-identity" tabindex="0" data-settings-tab="identity">Профиль</button>
+      <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-appearance" tabindex="-1" data-settings-tab="appearance">Внешний вид</button>
+      <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-notifications" tabindex="-1" data-settings-tab="notifications">Оповещения</button>
+      <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-folders-rules" tabindex="-1" data-settings-tab="folders-rules">Папки и правила</button>
+      <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-forwarding" tabindex="-1" data-settings-tab="forwarding">Пересылка</button>
+      <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-autoreply" tabindex="-1" data-settings-tab="autoreply">Автоответчик</button>
+      <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-signature" tabindex="-1" data-settings-tab="signature">Подпись</button>
+      <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-templates" tabindex="-1" data-settings-tab="templates">Шаблоны</button>
+    </div>
+    <div class="settings-content">
+      <section id="settings-panel-identity" role="tabpanel" class="settings-section" data-settings-panel="identity">
+        <h4>Корпоративный адрес</h4>
+        <p class="muted">Адрес управляется личным кабинетом и не изменяется в настройках почты.</p>
+        <div id="settings-email-address" class="settings-readonly-value">—</div>
+        <div class="settings-divider"></div>
+        <section class="telegram-sso-link-row" aria-labelledby="telegram-sso-link-title">
+          <div class="telegram-sso-link-copy">
+            <span class="telegram-sso-link-label" aria-hidden="true">Telegram</span>
+            <h4 id="telegram-sso-link-title">@RuPochta_bot</h4>
+            <p class="muted">Официальный бот авторизации RuPochta.</p>
+          </div>
+          <a id="telegram-auth-bot-link" class="btn btn-secondary" href="https://t.me/RuPochta_bot" target="_blank" rel="noopener">Открыть в Telegram</a>
+        </section>
+      </section>
+      <section id="settings-panel-appearance" role="tabpanel" class="settings-section hidden" data-settings-panel="appearance">
+        <h4>Внешний вид</h4>
+        <p class="muted">Выберите рабочую компоновку или вернитесь к прежнему оформлению.</p>
+        <div class="appearance-picker" id="appearance-picker">
+          <button id="appearance-workspace" type="button" class="appearance-option active" data-appearance-option="workspace">
+            <span class="appearance-preview appearance-preview-workspace" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span><strong>Рабочая очередь</strong><small>Строгая трёхпанельная компоновка</small></span>
+          </button>
+          <button id="appearance-classic" type="button" class="appearance-option" data-appearance-option="classic">
+            <span class="appearance-preview appearance-preview-classic" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span><strong>Классический</strong><small>Прежнее оформление RuPochta Mail</small></span>
+          </button>
+        </div>
+        <div id="appearance-status" class="muted"></div>
+        <div class="settings-divider"></div>
+        <h4>Цветовая тема</h4>
+        <p class="muted">Переключайте светлую и тёмную тему без перезагрузки страницы.</p>
+        <div class="theme-picker" id="theme-picker">
+          <button id="theme-dark" type="button" class="theme-option" data-theme-option="dark">
+            <span class="theme-swatch theme-swatch-dark"></span>
+            <span>Тёмная</span>
+          </button>
+          <button id="theme-light" type="button" class="theme-option active" data-theme-option="light">
+            <span class="theme-swatch theme-swatch-light"></span>
+            <span>Светлая</span>
+          </button>
+        </div>
+        <div id="theme-status" class="muted"></div>
+      </section>
+      <section id="settings-panel-notifications" role="tabpanel" class="settings-section hidden" data-settings-panel="notifications">
+        <h4>Оповещения о новых письмах</h4>
+        <p class="muted">Каналы работают независимо: можно включить браузер, Telegram или оба.</p>
+        <label class="settings-toggle-row">
+          <input type="checkbox" id="notification-push-toggle">
+          <span>
+            <strong>Push в браузере</strong>
+            <small id="notification-push-status">Проверяем поддержку браузера…</small>
+          </span>
+        </label>
+        <div class="settings-actions">
+          <button id="notification-push-test" class="btn btn-secondary" type="button">Тест Push</button>
+        </div>
+        <label class="settings-toggle-row">
+          <input type="checkbox" id="notification-telegram-toggle">
+          <span>
+            <strong>Уведомления в Telegram</strong>
+            <small id="notification-telegram-status">Проверяем привязку Telegram…</small>
+          </span>
+        </label>
+        <div id="notification-status" class="muted" aria-live="polite"></div>
+      </section>
+      <section id="settings-panel-folders-rules" role="tabpanel" class="settings-section hidden" data-settings-panel="folders-rules">
+        <div class="settings-section-head">
+          <div>
+            <h4>Папки</h4>
+            <p class="muted">Создавайте папки и используйте их как назначение правил.</p>
+          </div>
+        </div>
+        <div class="folder-create-row">
+          <input id="settings-folder-name" class="input-plain" maxlength="120" placeholder="Название новой папки">
+          <button id="settings-folder-create" class="btn btn-primary" type="button">Создать</button>
+        </div>
+        <div id="settings-folder-status" class="muted" aria-live="polite"></div>
+        <div id="settings-folder-list" class="settings-folder-list"></div>
+        <div class="settings-divider"></div>
+        <div class="settings-section-head">
+          <div>
+            <h4>Правила обработки писем</h4>
+            <p class="muted">Правила применяются на почтовом сервере до доставки.</p>
+          </div>
+          <button id="sieve-new" class="mini-btn" type="button">Новое правило</button>
+        </div>
+        <div id="sieve-list" class="sieve-list"></div>
+        <div id="sieve-editor" class="sieve-editor hidden">
+          <h4 id="sieve-editor-title">Новое правило</h4>
+          <input type="hidden" id="sieve-rule-id">
+          <label>Название
+            <input type="text" id="sieve-name" class="input-plain" maxlength="200" placeholder="Например, Рассылки в архив">
+          </label>
+          <div class="rule-editor-grid">
+            <label>Если поле
+              <select id="sieve-field" class="input-plain">
+                <option value="from">От</option>
+                <option value="to">Кому</option>
+                <option value="subject">Тема</option>
+                <option value="body">Текст</option>
+              </select>
+            </label>
+            <label>Условие
+              <select id="sieve-op" class="input-plain">
+                <option value="contains">содержит</option>
+                <option value="is">равно</option>
+              </select>
+            </label>
+            <label>Значение
+              <input type="text" id="sieve-value" class="input-plain">
+            </label>
+            <label>Действие
+              <select id="sieve-action-type" class="input-plain">
+                <option value="move">переместить в папку</option>
+                <option value="copy">копировать в папку</option>
+                <option value="mark_read">пометить прочитанным</option>
+                <option value="flag">отметить флажком</option>
+                <option value="discard">удалить</option>
+              </select>
+            </label>
+            <label id="sieve-action-value-row">Папка
+              <select id="sieve-action-value" class="input-plain"></select>
+            </label>
+          </div>
+          <div class="settings-actions">
+            <button id="sieve-save" class="btn btn-primary" type="button">Сохранить правило</button>
+            <button id="sieve-cancel" class="btn btn-secondary" type="button">Отмена</button>
+            <span id="sieve-status" class="muted"></span>
+          </div>
+        </div>
+      </section>
+      <section id="settings-panel-forwarding" role="tabpanel" class="settings-section hidden" data-settings-panel="forwarding">
+        <h4>Пересылка</h4>
+        <p class="muted">Пересылайте входящие письма на один дополнительный адрес.</p>
+        <label class="forwarding-option">
+          <input type="checkbox" id="forwarding-enabled">
+          <span>Включить пересылку</span>
+        </label>
+        <label class="forwarding-address-label" for="forwarding-address">Дополнительный адрес</label>
+        <input type="email" id="forwarding-address" class="input-plain" maxlength="254" autocomplete="email">
+        <label class="forwarding-option">
+          <input type="checkbox" id="forwarding-keep-copy" checked>
+          <span>Сохранять копию в RuPochta Mail</span>
+        </label>
+        <div class="settings-actions">
+          <button id="forwarding-save" class="btn btn-primary" type="button">Сохранить</button>
+          <span id="forwarding-status" aria-live="polite" class="muted"></span>
+        </div>
+      </section>
+      <section id="settings-panel-autoreply" role="tabpanel" class="settings-section hidden" data-settings-panel="autoreply">
+        <h4>Автоответчик</h4>
+        <p class="muted">Отправляет один автоматический ответ каждому отправителю в выбранном интервале.</p>
+        <label class="settings-toggle-row">
+          <input type="checkbox" id="autoreply-enabled">
+          <span>
+            <strong>Включить автоответчик</strong>
+            <small>Расписание можно оставить пустым, чтобы отвечать сразу.</small>
+          </span>
+        </label>
+        <div class="autoreply-date-grid">
+          <label>Начало
+            <input type="date" id="autoreply-start-date" class="input-plain">
+          </label>
+          <label>Окончание
+            <input type="date" id="autoreply-end-date" class="input-plain">
+          </label>
+        </div>
+        <label>Тема
+          <input type="text" id="autoreply-subject" class="input-plain" maxlength="200" placeholder="Вне офиса">
+        </label>
+        <label>Текст ответа
+          <textarea id="autoreply-body" class="settings-textarea" rows="7" maxlength="5000" placeholder="Спасибо за письмо. Я вернусь..."></textarea>
+        </label>
+        <label class="autoreply-repeat-label">Повторно отвечать одному отправителю не чаще, чем раз в
+          <span class="autoreply-repeat-control">
+            <input type="number" id="autoreply-repeat-days" class="input-plain" min="1" max="30" value="1">
+            <span>дн.</span>
+          </span>
+        </label>
+        <div class="settings-actions">
+          <button id="autoreply-save" class="btn btn-primary" type="button">Сохранить</button>
+          <span id="autoreply-status" class="muted" aria-live="polite"></span>
+        </div>
+      </section>
+      <section id="settings-panel-signature" role="tabpanel" class="settings-section hidden" data-settings-panel="signature">
+        <h4>Подпись</h4>
+        <p class="muted">Автоматически подставляется в новые письма и ответы.</p>
+        <textarea id="signature-input" rows="5" class="settings-textarea" placeholder="С уважением,&#10;Имя Фамилия"></textarea>
+        <div class="settings-actions">
+          <button id="signature-save" class="btn btn-primary">Сохранить подпись</button>
+          <span id="signature-status" class="muted"></span>
+        </div>
+      </section>
+      <section id="settings-panel-templates" role="tabpanel" class="settings-section hidden" data-settings-panel="templates">
+        <div class="settings-section-head">
+          <div>
+            <h4>Шаблоны</h4>
+            <p class="muted">Быстрые заготовки для типовых писем.</p>
+          </div>
+          <button id="template-new" class="mini-btn">Новый шаблон</button>
+        </div>
+        <div class="template-layout">
+          <div id="template-list" class="template-list"></div>
+          <div class="template-editor">
+            <input type="hidden" id="template-id">
+            <label>Название
+              <input type="text" id="template-name" class="input-plain" placeholder="Например, follow-up">
+            </label>
+            <label>Тема
+              <input type="text" id="template-subject" class="input-plain" placeholder="Тема шаблона">
+            </label>
+            <label>Текст
+              <textarea id="template-body" rows="7" class="settings-textarea" placeholder="Текст шаблона"></textarea>
+            </label>
+            <div class="settings-actions">
+              <button id="template-save" class="btn btn-primary">Сохранить шаблон</button>
+              <button id="template-delete" class="btn btn-secondary">Удалить</button>
+              <button id="template-use" class="btn btn-secondary">Использовать</button>
+              <span id="template-status" class="muted"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- RuPochta contacts -->
+<div id="directory-modal" class="modal hidden" data-workspace-surface="directory" aria-hidden="true">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card directory-card">
+    <div class="modal-header">
+      <h3>Контакты <small id="dir-total" class="muted"></small></h3>
+      <button class="icon-btn" data-close-modal="directory-modal" data-workspace-back aria-label="Закрыть">×</button>
+    </div>
+    <div class="directory-body">
+      <aside class="directory-sidebar">
+        <input type="search" id="dir-search" placeholder="Поиск по имени или email">
+        <ul id="dir-departments" class="dir-dept-list hidden"></ul>
+      </aside>
+      <section class="directory-main">
+        <div id="dir-loading" class="empty-state">Загрузка…</div>
+        <div id="dir-grid" class="dir-grid"></div>
+      </section>
+      <aside id="dir-details" class="directory-details hidden">
+        <div class="dir-detail-header">
+          <img id="dir-detail-photo" class="dir-detail-photo" alt="">
+          <div>
+            <h4 id="dir-detail-name">—</h4>
+            <div id="dir-detail-title" class="muted"></div>
+            <div id="dir-detail-dept" class="muted"></div>
+          </div>
+        </div>
+        <div class="dir-detail-fields">
+          <div class="dir-field"><span class="label">Email:</span> <span id="dir-detail-email"></span></div>
+        </div>
+        <div class="dir-detail-actions">
+          <button id="dir-act-email" class="btn btn-primary">Написать email</button>
+          <button id="dir-act-copy-email" class="btn btn-secondary">Копировать email</button>
+        </div>
+        <button class="icon-btn dir-close" id="dir-detail-close" title="Закрыть">×</button>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<!-- Calendar -->
+<div id="calendar-modal" class="modal hidden" data-workspace-surface="calendar" aria-hidden="true">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card calendar-card">
+    <div class="modal-header">
+      <h3>Календарь <small id="cal-meta" class="muted"></small></h3>
+      <div class="cal-header-actions">
+        <button id="cal-btn-today" class="mini-btn">Сегодня</button>
+        <button id="cal-btn-prev" class="mini-btn">‹</button>
+        <span id="cal-current-label" class="muted"></span>
+        <button id="cal-btn-next" class="mini-btn">›</button>
+        <button id="cal-btn-new" class="btn btn-primary">+ Событие</button>
+        <button id="cal-btn-connect" class="mini-btn" title="Настройки подключения для Outlook/Thunderbird/iOS">Подключение</button>
+        <button class="icon-btn" data-close-modal="calendar-modal" data-workspace-back aria-label="Закрыть">×</button>
+      </div>
+    </div>
+    <div class="calendar-body">
+      <aside class="calendar-sidebar">
+        <div class="section-title">Ближайшие</div>
+        <ul id="cal-upcoming" class="cal-upcoming"></ul>
+      </aside>
+      <section class="calendar-main">
+        <div id="cal-month-grid" class="cal-month-grid"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- Calendar event edit dialog -->
+<div id="cal-event-modal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="cal-event-title">Новое событие</h3>
+      <button class="icon-btn" data-close-modal="cal-event-modal">×</button>
+    </div>
+    <div class="compose-form">
+      <label>Название <input type="text" id="cal-ev-summary" placeholder="О чём встреча"></label>
+      <label>Начало
+        <input type="datetime-local" id="cal-ev-start">
+      </label>
+      <label>Окончание
+        <input type="datetime-local" id="cal-ev-end">
+      </label>
+      <label>Место <input type="text" id="cal-ev-location" placeholder="Комната / Zoom link"></label>
+      <label>Описание
+        <textarea id="cal-ev-description" rows="5"></textarea>
+      </label>
+      <label>Участники
+        <div class="autocomplete-wrap">
+          <input type="text" id="cal-ev-attendees" autocomplete="off" placeholder="имя или email сотрудника">
+          <div id="ac-cal-attendees" class="autocomplete-list hidden"></div>
+        </div>
+        <div id="cal-ev-attendees-chips" class="recipient-chip-list hidden"></div>
+      </label>
+      <div class="modal-footer">
+        <button id="cal-ev-save" class="btn btn-primary">Сохранить</button>
+        <button id="cal-ev-delete" class="btn btn-secondary" style="display:none">Удалить</button>
+        <button class="btn btn-secondary" data-close-modal="cal-event-modal">Отменить</button>
+        <span id="cal-ev-status" class="muted"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Calendar "connect external client" info modal -->
+<div id="cal-connect-modal" class="modal hidden">
+  <div class="modal-backdrop"></div>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Подключение внешнего клиента</h3>
+      <button class="icon-btn" data-close-modal="cal-connect-modal">×</button>
+    </div>
+    <div class="settings-content">
+      <p class="muted">Скопируйте эти данные в Outlook / Thunderbird / iOS Calendar / DAVx5 (Android). Пароль — тот же, что у корп. почты.</p>
+      <div class="form-group"><label>CalDAV URL</label>
+        <input type="text" id="cal-connect-url" readonly class="text-field">
+      </div>
+      <div class="form-group"><label>Логин</label>
+        <input type="text" id="cal-connect-user" readonly class="text-field">
+      </div>
+      <div class="hint">В iOS Calendar: Настройки → Учётные записи → Другое → CalDAV. В Thunderbird: Календарь → Новый → В сети → CalDAV.</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/vendor/gsap.min.js?v=3.15.0"></script>
+<script>
+  (() => {
+    const password = document.getElementById("login-password");
+    const toggle = document.getElementById("login-password-toggle");
+    toggle.addEventListener("click", () => {
+      const visible = password.type === "password";
+      password.type = visible ? "text" : "password";
+      toggle.setAttribute("aria-pressed", String(!visible));
+      toggle.setAttribute("aria-label", visible ? "Скрыть пароль" : "Показать пароль");
+    });
+
+    const { gsap } = window;
+    const slides = gsap?.utils.toArray("[data-login-hero-slide]") || [];
+    if (slides.length < 2) return;
+    const visibleState = { autoAlpha: 1 };
+    const hiddenState = { autoAlpha: 0 };
+    const slideInterval = 3;
+    const transitionDuration = 1.2;
+    const media = gsap.matchMedia();
+    media.add({
+      isDesktop: "(min-width: 1121px)",
+      reduceMotion: "(prefers-reduced-motion: reduce)",
+    }, ({ conditions: { isDesktop, reduceMotion } }) => {
+      if (!isDesktop) return;
+      const timeline = gsap.timeline({
+        repeat: -1,
+        defaults: { duration: transitionDuration, ease: "sine.inOut" },
+      });
+      timeline.set(slides, visibleState, 0).set(slides.slice(1), hiddenState, 0);
+      slides.forEach((current, index) => {
+        const next = slides[(index + 1) % slides.length];
+        const changeAt = (index + 1) * slideInterval;
+        if (reduceMotion) {
+          timeline.set(current, hiddenState, changeAt).set(next, visibleState, changeAt);
+          return;
+        }
+        const start = changeAt - transitionDuration;
+        timeline
+          .to(current, { autoAlpha: 0 }, start)
+          .to(next, { autoAlpha: 1 }, start);
+      });
+      const loginScreen = document.getElementById("login-screen");
+      const visibilityObserver = new MutationObserver(() => timeline.paused(loginScreen.classList.contains("hidden")));
+      visibilityObserver.observe(loginScreen, { attributes: true, attributeFilter: ["class"] });
+      return () => {
+        timeline.kill();
+        visibilityObserver.disconnect();
+      };
+    });
+    window.addEventListener("pagehide", () => media.kill(), { once: true });
+  })();
+</script>
+<script src="/static/app.js?v=20260803-compose-session1"></script>
+<script>
+  // Register the service worker for PWA offline shell + push notifications
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js?v=20260803-login-banner3', { scope: '/' })
+        .then((reg) => {
+          console.log('[rupochta-mail] service worker registered:', reg.scope);
+          window.jmailServiceWorker = reg;
+        })
+        .catch((err) => console.warn('[rupochta-mail] SW register failed:', err));
+    });
+  }
+</script>
+</body>
+</html>

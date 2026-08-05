@@ -1,0 +1,40 @@
+{
+  "name": "RuPochta Mail",
+  "short_name": "RuPochta Mail",
+  "description": "Рабочая почта RuPochta",
+  "start_url": "/?source=pwa",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f8ff",
+  "theme_color": "#0b1d45",
+  "lang": "ru",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/static/brand/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/brand/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Написать письмо",
+      "short_name": "Написать",
+      "url": "/?action=compose",
+      "icons": [{ "src": "/static/brand/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Календарь",
+      "short_name": "Календарь",
+      "url": "/?action=calendar",
+      "icons": [{ "src": "/static/brand/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

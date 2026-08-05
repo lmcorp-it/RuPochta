@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Администрирование RuPochta Mail</title>
+<link rel="icon" type="image/png" href="/static/brand/icon-192.png">
+<link rel="stylesheet" href="/static/workspace.css">
+<link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+<svg class="icon-sprite" aria-hidden="true">
+  <symbol id="icon-home" viewBox="0 0 24 24">
+    <path d="M3 11.5 12 4l9 7.5"></path>
+    <path d="M5.5 10v10h13V10"></path>
+    <path d="M9.5 20v-6h5v6"></path>
+  </symbol>
+  <symbol id="icon-mailbox" viewBox="0 0 24 24">
+    <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+    <path d="m4 7 8 6 8-6"></path>
+  </symbol>
+  <symbol id="icon-queue" viewBox="0 0 24 24">
+    <rect x="4" y="4" width="16" height="5" rx="1.5"></rect>
+    <rect x="4" y="15" width="16" height="5" rx="1.5"></rect>
+    <path d="M8 9v6M16 9v6"></path>
+  </symbol>
+  <symbol id="icon-link" viewBox="0 0 24 24">
+    <path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2"></path>
+    <path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"></path>
+  </symbol>
+  <symbol id="icon-audit" viewBox="0 0 24 24">
+    <rect x="5" y="3" width="14" height="18" rx="2"></rect>
+    <path d="M9 8h6M9 12h6M9 16h4"></path>
+  </symbol>
+  <symbol id="icon-stats" viewBox="0 0 24 24">
+    <path d="M4 20V10h4v10M10 20V4h4v16M16 20v-7h4v7"></path>
+  </symbol>
+  <symbol id="icon-settings" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="3"></circle>
+    <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path>
+  </symbol>
+  <symbol id="icon-user" viewBox="0 0 24 24">
+    <circle cx="12" cy="8" r="4"></circle>
+    <path d="M4.5 21a7.5 7.5 0 0 1 15 0"></path>
+  </symbol>
+  <symbol id="icon-plus" viewBox="0 0 24 24">
+    <path d="M12 5v14M5 12h14"></path>
+  </symbol>
+  <symbol id="icon-refresh" viewBox="0 0 24 24">
+    <path d="M20 7v5h-5"></path>
+    <path d="M19 12a7 7 0 1 0-2 5"></path>
+  </symbol>
+  <symbol id="icon-search" viewBox="0 0 24 24">
+    <circle cx="11" cy="11" r="7"></circle>
+    <path d="m16 16 5 5"></path>
+  </symbol>
+  <symbol id="icon-logout" viewBox="0 0 24 24">
+    <path d="M10 5H5v14h5"></path>
+    <path d="M14 8l4 4-4 4M18 12H9"></path>
+  </symbol>
+  <symbol id="icon-menu" viewBox="0 0 24 24">
+    <path d="M4 7h16M4 12h16M4 17h16"></path>
+  </symbol>
+  <symbol id="icon-more" viewBox="0 0 24 24">
+    <circle cx="5" cy="12" r="1"></circle>
+    <circle cx="12" cy="12" r="1"></circle>
+    <circle cx="19" cy="12" r="1"></circle>
+  </symbol>
+  <symbol id="icon-close" viewBox="0 0 24 24">
+    <path d="m6 6 12 12M18 6 6 18"></path>
+  </symbol>
+</svg>
+
+<div id="loginPage" class="login-shell">
+  <div class="login-panel">
+    <header class="login-product">
+      <span class="product-mark">YD</span>
+      <div>
+        <div class="login-mark">RuPochta Mail</div>
+        <div class="login-domain">Администрирование</div>
+      </div>
+    </header>
+    <h1>Управление корпоративной почтой</h1>
+    <p class="login-copy">Доступ разрешён участникам группы системных администраторов. Используйте корпоративную учётную запись.</p>
+    <form class="login-form" id="adminLoginForm">
+      <div class="login-divider"><span>Вход через AD</span></div>
+      <label class="field-label" for="loginUser">Логин AD</label>
+      <input type="text" id="loginUser" class="text-field" placeholder="ivanov" autocomplete="username">
+      <label class="field-label" for="loginPass">Пароль</label>
+      <input type="password" id="loginPass" class="text-field" placeholder="••••••••" autocomplete="current-password">
+      <button class="ghost-btn full" id="loginBtn" type="submit">Войти с логином AD</button>
+      <div id="loginError" class="inline-error" role="alert"></div>
+    </form>
+  </div>
+</div>
+
+<div id="appPage" class="app-shell hidden">
+  <header class="mobile-topbar">
+    <div class="mobile-brand">
+      <span class="product-mark small">YD</span>
+      <div>
+        <strong>RuPochta Mail</strong>
+        <span>Администрирование</span>
+      </div>
+    </div>
+    <button class="icon-btn mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Открыть меню" aria-expanded="false">
+      <svg class="ui-icon"><use href="#icon-menu"></use></svg>
+    </button>
+  </header>
+
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="product-mark small">YD</span>
+      <div>
+        <div class="sidebar-mark">RuPochta Mail</div>
+        <div class="sidebar-sub">Администрирование</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav" aria-label="Основная навигация">
+      <button class="nav-link active" data-section="overview" type="button" aria-current="page">
+        <svg class="nav-icon"><use href="#icon-home"></use></svg>
+        <span>Обзор</span>
+      </button>
+      <button class="nav-link" data-section="mailboxes" type="button" aria-current="false">
+        <svg class="nav-icon"><use href="#icon-mailbox"></use></svg>
+        <span>Ящики</span>
+      </button>
+      <button class="nav-link" data-section="domains" type="button" aria-current="false">
+        <svg class="nav-icon"><use href="#icon-mailbox"></use></svg>
+        <span>Домены</span>
+      </button>
+      <button class="nav-link" id="managedAddressNav" data-section="addresses" type="button" aria-current="false">
+        <svg class="nav-icon"><use href="#icon-link"></use></svg>
+        <span>Адреса и группы</span>
+      </button>
+      <button class="nav-link" data-section="diagnostics" type="button" aria-current="false">
+        <svg class="nav-icon"><use href="#icon-queue"></use></svg>
+        <span>Диагностика</span>
+        <span class="nav-badge hidden" id="queueBadge">0</span>
+      </button>
+      <button class="nav-link" data-section="audit" type="button" aria-current="false">
+        <svg class="nav-icon"><use href="#icon-audit"></use></svg>
+        <span>Аудит</span>
+      </button>
+      <button class="nav-link" id="settingsNav" data-section="settings" type="button" aria-current="false">
+        <svg class="nav-icon"><use href="#icon-settings"></use></svg>
+        <span>Настройки</span>
+      </button>
+    </nav>
+    <button class="sidebar-account" id="admin-profile-button" type="button" title="Открыть личный кабинет">
+      <span id="admin-profile-avatar" class="sidebar-avatar">
+        <svg class="ui-icon"><use href="#icon-user"></use></svg>
+      </span>
+      <div class="sidebar-user">
+        <span class="sidebar-user-label">Администратор</span>
+        <strong id="sidebarUser">—</strong>
+      </div>
+    </button>
+    <div class="sidebar-footer">
+      <button class="sidebar-logout" id="logoutBtn" type="button">
+        <svg class="ui-icon"><use href="#icon-logout"></use></svg>
+        <span>Выйти</span>
+      </button>
+    </div>
+  </aside>
+
+  <div class="mobile-drawer hidden" id="mobileDrawer" aria-hidden="true">
+    <button class="mobile-drawer-backdrop" data-mobile-close type="button" tabindex="-1" aria-label="Закрыть меню"></button>
+    <aside class="mobile-drawer-panel" role="dialog" aria-modal="true" aria-label="Навигация">
+      <div class="mobile-drawer-head">
+        <strong>Разделы</strong>
+        <button class="icon-btn" data-mobile-close type="button" aria-label="Закрыть меню">
+          <svg class="ui-icon"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+      <nav class="mobile-drawer-nav" aria-label="Мобильная навигация">
+        <button class="mobile-nav-link active" data-section="overview" type="button" aria-current="page">Обзор</button>
+        <button class="mobile-nav-link" data-section="mailboxes" type="button" aria-current="false">Ящики</button>
+        <button class="mobile-nav-link" data-section="domains" type="button" aria-current="false">Домены</button>
+        <button class="mobile-nav-link" data-section="addresses" type="button" aria-current="false">Адреса и группы</button>
+        <button class="mobile-nav-link" data-section="diagnostics" type="button" aria-current="false">Диагностика</button>
+        <button class="mobile-nav-link" data-section="audit" type="button" aria-current="false">Аудит</button>
+        <button class="mobile-nav-link" data-section="settings" type="button" aria-current="false">Настройки</button>
+      </nav>
+      <button class="mobile-drawer-logout" id="mobileLogoutBtn" type="button">Выйти</button>
+    </aside>
+  </div>
+
+  <div id="admin-workspace-live" class="sr-only" aria-live="polite"></div>
+  <main class="main-shell">
+    <header class="app-header">
+      <div>
+        <h1 id="appPageTitle">Управление ящиками</h1>
+        <p id="appPageSubtitle">Создание, настройка и обслуживание почтовых ящиков сотрудников.</p>
+      </div>
+      <button class="primary-btn create-mailbox-btn" id="createMailboxBtn" type="button" aria-label="Создать ящик">
+        <svg class="ui-icon"><use href="#icon-plus"></use></svg>
+        <span class="action-label action-label-full" aria-hidden="true">Создать ящик</span>
+        <span class="action-label action-label-short" aria-hidden="true">Создать</span>
+      </button>
+    </header>
+
+    <section class="mail-health-banner loading" id="mailHealthBanner" aria-live="polite">
+      <div class="mail-health-main">
+        <div class="mail-health-title-row">
+          <div class="mail-health-icon" id="mailHealthIcon">…</div>
+          <div>
+            <div class="mail-health-title">Состояние почтовой системы</div>
+            <div class="mail-health-headline" id="mailHealthHeadline">Получаю состояние сервисов и доставки.</div>
+          </div>
+        </div>
+        <div class="mail-health-pills" id="mailHealthPills"></div>
+        <div class="mail-health-issues hidden" id="mailHealthIssues"></div>
+      </div>
+      <div class="mail-health-side">
+        <div class="mail-health-meta">Проверено: <span id="mailHealthCheckedAt">—</span></div>
+        <button class="icon-btn health-refresh-btn" id="mailHealthRefreshBtn" type="button" aria-label="Обновить состояние" title="Обновить состояние">
+          <svg class="ui-icon"><use href="#icon-refresh"></use></svg>
+        </button>
+      </div>
+    </section>
+
+    <section class="page active" id="page-desk">
+      <div class="search-command">
+        <div class="search-field-wrap">
+          <svg class="search-icon"><use href="#icon-search"></use></svg>
+          <label class="sr-only" for="supportSearch">Поиск почтового ящика или сотрудника</label>
+          <input type="text" id="supportSearch" class="hero-search" placeholder="Найти ящик или сотрудника">
+        </div>
+        <button class="ghost-btn refresh-context-btn" id="deskRefreshBtn" type="button" aria-label="Обновить результаты" title="Обновить результаты">
+          <svg class="ui-icon"><use href="#icon-refresh"></use></svg>
+          <span>Обновить</span>
+        </button>
+        <div class="search-facts" aria-label="Сводка">
+          <div class="metric">
+            <div class="metric-value" id="supportResultCount">0</div>
+            <div class="metric-label">Найдено</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value" id="deskMailboxCount">—</div>
+            <div class="metric-label">Ящиков</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value" id="deskQueueCount">—</div>
+            <div class="metric-label">В очереди</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="desk-grid">
+        <section class="results-panel">
+          <div class="panel-head">
+            <h2>Результаты</h2>
+            <span class="panel-meta" id="supportMeta">Выберите ящик или начните поиск.</span>
+          </div>
+          <div id="supportResults" class="support-results"></div>
+        </section>
+
+        <section class="workspace-panel-shell">
+          <div class="panel-head workspace-panel-head">
+            <h2>Рабочая область</h2>
+            <span class="panel-meta" id="workspaceMeta">Состояние, диагностика, события и настройки.</span>
+          </div>
+          <div id="supportWorkspace" class="support-workspace"></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="page" id="page-accounts">
+      <div class="section-toolbar">
+        <div class="stats-strip">
+          <div class="metric-card">
+            <div class="metric-value" id="statTotal">—</div>
+            <div class="metric-label">Всего ящиков</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value">example.com</div>
+            <div class="metric-label">Основной домен</div>
+          </div>
+        </div>
+        <button class="ghost-btn" id="accountsRefreshBtn" type="button">
+          <svg class="ui-icon"><use href="#icon-refresh"></use></svg>
+          <span>Обновить</span>
+        </button>
+      </div>
+      <section class="data-panel">
+        <div class="panel-head split">
+          <h2>Список почтовых ящиков</h2>
+          <input type="text" id="accountSearch" class="text-field compact" placeholder="Поиск по email">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Email</th><th>Домен</th><th>Действия</th></tr>
+            </thead>
+            <tbody id="accountsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section class="page" id="page-domains">
+      <div class="section-toolbar">
+        <div class="stats-strip">
+          <div class="metric-card">
+            <div class="metric-value" id="domainMailboxCount">—</div>
+            <div class="metric-label">Ящиков в домене</div>
+          </div>
+          <div class="metric-card">
+            <label class="metric-label" for="domainMailboxDomain">Дополнительный домен</label>
+            <select id="domainMailboxDomain" class="text-field compact"></select>
+          </div>
+        </div>
+        <button class="ghost-btn" id="domainMailboxRefreshBtn" type="button">
+          <svg class="ui-icon"><use href="#icon-refresh"></use></svg>
+          <span>Обновить</span>
+        </button>
+      </div>
+      <section class="data-panel">
+        <div class="panel-head split">
+          <h2>Ящики дополнительных доменов</h2>
+        </div>
+        <p class="panel-hint" style="margin:0 0 12px;color:var(--muted,#8aa0c6);font-size:13px">
+          Почтовые ящики доменов, размещённых на нашем сервере (docker-mailserver),
+          помимо основного. Создание, смена пароля и удаление выполняются напрямую на
+          почтовом сервере. Алиасы и общие ящики для этих доменов пока не поддерживаются.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Email</th><th>Действия</th></tr>
+            </thead>
+            <tbody id="domainMailboxBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section class="page" id="page-managed-addresses">
+      <nav class="admin-section-tabs" aria-label="Адреса и группы">
+        <button class="admin-section-tab active" data-admin-page="managed-addresses" type="button" aria-current="page">Управляемые адреса</button>
+        <button class="admin-section-tab" data-admin-page="aliases" type="button" aria-current="false">Алиасы</button>
+      </nav>
+      <div class="section-toolbar">
+        <div class="stats-strip">
+          <div class="metric-card">
+            <div class="metric-value" id="managedGroupCount">—</div>
+            <div class="metric-label">Групповых</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value" id="managedDistributionCount">—</div>
+            <div class="metric-label">Рассылок</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value" id="managedServiceCount">—</div>
+            <div class="metric-label">Сервисных</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value" id="managedTechnicalCount">—</div>
+            <div class="metric-label">Технических</div>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="ghost-btn" id="managedAddressRefreshBtn" type="button">
+            <svg class="ui-icon"><use href="#icon-refresh"></use></svg>
+            <span>Обновить</span>
+          </button>
+          <button class="primary-btn" id="managedAddressCreateBtn" type="button">
+            <svg class="ui-icon"><use href="#icon-plus"></use></svg>
+            <span>Создать адрес</span>
+          </button>
+        </div>
+      </div>
+      <div class="managed-address-filters">
+        <div class="search-field-wrap">
+          <svg class="search-icon"><use href="#icon-search"></use></svg>
+          <label class="sr-only" for="managedAddressSearch">Поиск общего адреса</label>
+          <input type="text" id="managedAddressSearch" class="text-field managed-address-search" placeholder="Email, название или ответственный">
+        </div>
+        <label class="sr-only" for="managedAddressKindFilter">Тип адреса</label>
+        <select id="managedAddressKindFilter" class="text-field compact">
+          <option value="all">Все типы</option>
+          <option value="group">Групповые</option>
+          <option value="distribution">Рассылки</option>
+          <option value="service">Сервисные</option>
+          <option value="technical">Технические</option>
+        </select>
+        <label class="sr-only" for="managedAddressCompanyFilter">Компания</label>
+        <select id="managedAddressCompanyFilter" class="text-field compact">
+          <option value="all">Все компании</option>
+          <option value="Corp">Corp</option>
+          <option value="Alpha">Alpha</option>
+          <option value="Beta">Beta</option>
+          <option value="Gamma">Gamma</option>
+        </select>
+      </div>
+      <div class="managed-address-layout">
+        <section class="managed-address-list-panel">
+          <div class="panel-head">
+            <h2>Адреса</h2>
+            <span class="panel-meta" id="managedAddressListMeta">0</span>
+          </div>
+          <div id="managedAddressList" class="managed-address-list"></div>
+        </section>
+        <section class="managed-address-workspace-panel">
+          <div class="panel-head">
+            <h2>Карточка адреса</h2>
+            <span class="panel-meta">Состав, назначение и состояние</span>
+          </div>
+          <div id="managedAddressWorkspace" class="managed-address-workspace"></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="page" id="page-queue">
+      <nav class="admin-section-tabs" aria-label="Диагностика">
+        <button class="admin-section-tab active" data-admin-page="queue" type="button" aria-current="page">Очередь</button>
+        <button class="admin-section-tab" data-admin-page="stats" type="button" aria-current="false">Статистика</button>
+      </nav>
+      <div class="section-toolbar">
+        <div class="stats-strip">
+          <div class="metric-card">
+            <div class="metric-value" id="queueActiveStat">—</div>
+            <div class="metric-label">Активные</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value" id="queueDeferredStat">—</div>
+            <div class="metric-label">Отложенные</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-value" id="queueHoldStat">—</div>
+            <div class="metric-label">Удержанные</div>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="ghost-btn" id="queueRefreshBtn" type="button">Обновить</button>
+          <button class="primary-btn" id="queueFlushBtn" type="button">Запустить обработку</button>
+          <button class="danger-btn" id="queueDeleteAllBtn" type="button">Очистить очередь</button>
+        </div>
+      </div>
+      <section class="data-panel">
+        <div class="panel-head split">
+          <h2>Сообщения в очереди <small id="queueCount"></small></h2>
+          <input type="text" id="queueSearch" class="text-field compact" placeholder="ID, отправитель, получатель или ошибка">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>Статус</th><th>Время</th><th>Размер</th><th>Отправитель</th><th>Получатели</th><th>Ошибка</th><th>Действие</th>
+              </tr>
+            </thead>
+            <tbody id="queueBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section class="page" id="page-aliases">
+      <nav class="admin-section-tabs" aria-label="Адреса и группы">
+        <button class="admin-section-tab" data-admin-page="managed-addresses" type="button" aria-current="false">Управляемые адреса</button>
+        <button class="admin-section-tab active" data-admin-page="aliases" type="button" aria-current="page">Алиасы</button>
+      </nav>
+      <div class="section-toolbar">
+        <p class="section-copy">Связь логина AD с адресом корпоративной почты.</p>
+        <button class="ghost-btn" id="aliasesRefreshBtn" type="button">Обновить</button>
+      </div>
+      <section class="data-panel">
+        <div class="panel-head">
+          <h2>Создать или изменить алиас</h2>
+        </div>
+        <div class="toolbar-grid">
+          <div>
+            <label class="field-label" for="aliasAd">Логин AD</label>
+            <input type="text" id="aliasAd" class="text-field" placeholder="ivanov">
+          </div>
+          <div>
+            <label class="field-label" for="aliasMl">Почтовый логин</label>
+            <input type="text" id="aliasMl" class="text-field" placeholder="i.ivanov">
+          </div>
+          <div class="toolbar-action">
+            <button class="primary-btn full" id="aliasSaveBtn" type="button">Сохранить</button>
+          </div>
+        </div>
+      </section>
+      <section class="data-panel">
+        <div class="panel-head">
+          <h2>Действующие алиасы <small id="aliasesCount"></small></h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Логин AD</th><th>Почтовый логин</th><th>Сотрудник</th><th>Источник</th><th>Создан</th><th>Действие</th></tr></thead>
+            <tbody id="aliasesBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section class="page" id="page-audit">
+      <div class="section-toolbar">
+        <p class="section-copy">История административных операций и их результатов.</p>
+        <button class="ghost-btn" id="auditRefreshBtn" type="button">Обновить</button>
+      </div>
+      <section class="data-panel">
+        <div class="panel-head">
+          <h2>Фильтры</h2>
+        </div>
+        <div class="toolbar-grid audit-filters">
+          <div>
+            <label class="field-label" for="auditAdmin">Администратор</label>
+            <input type="text" id="auditAdmin" class="text-field" placeholder="ivanov.i">
+          </div>
+          <div>
+            <label class="field-label" for="auditAction">Действие</label>
+            <select id="auditAction" class="text-field">
+              <option value="">Все действия</option>
+              <option value="auth.login">auth.login</option>
+              <option value="auth.logout">auth.logout</option>
+              <option value="account.provision">account.provision</option>
+              <option value="account.create">account.create</option>
+              <option value="account.delete">account.delete</option>
+              <option value="account.password">account.password</option>
+              <option value="account.suspend">account.suspend</option>
+              <option value="account.restore">account.restore</option>
+              <option value="alias.set">alias.set</option>
+              <option value="alias.delete">alias.delete</option>
+              <option value="managed_address.create">managed_address.create</option>
+              <option value="managed_address.update">managed_address.update</option>
+              <option value="managed_address.password">managed_address.password</option>
+              <option value="managed_address.resync">managed_address.resync</option>
+              <option value="managed_address.delete">managed_address.delete</option>
+              <option value="queue.flush">queue.flush</option>
+              <option value="queue.delete">queue.delete</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label" for="auditTarget">Объект</label>
+            <input type="text" id="auditTarget" class="text-field" placeholder="max@example.com">
+          </div>
+          <div class="toolbar-action">
+            <button class="primary-btn full" id="auditApplyBtn" type="button">Применить</button>
+          </div>
+        </div>
+      </section>
+      <section class="data-panel">
+        <div class="panel-head">
+          <h2>Записи журнала <small id="auditCount"></small></h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Время</th><th>Администратор</th><th>Действие</th><th>Объект</th><th>IP</th><th>Подробности</th><th>Статус</th></tr></thead>
+            <tbody id="auditBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section class="page" id="page-stats">
+      <nav class="admin-section-tabs" aria-label="Диагностика">
+        <button class="admin-section-tab" data-admin-page="queue" type="button" aria-current="false">Очередь</button>
+        <button class="admin-section-tab active" data-admin-page="stats" type="button" aria-current="page">Статистика</button>
+      </nav>
+      <div class="section-toolbar">
+        <div class="stats-strip">
+          <div class="metric-card"><div class="metric-value" id="statBoxes">—</div><div class="metric-label">Всего ящиков</div></div>
+          <div class="metric-card"><div class="metric-value" id="statSize">—</div><div class="metric-label">Общий размер</div></div>
+          <div class="metric-card"><div class="metric-value" id="statQueue">—</div><div class="metric-label">В очереди</div></div>
+          <div class="metric-card"><div class="metric-value" id="statDeferred">—</div><div class="metric-label">Отложено</div></div>
+        </div>
+        <button class="ghost-btn" id="statsRefreshBtn" type="button">Обновить</button>
+      </div>
+      <section class="data-panel">
+        <div class="panel-head">
+          <h2>Размер почтовых ящиков</h2>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Email</th><th class="align-right">Размер</th></tr></thead>
+            <tbody id="statsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section class="page" id="page-settings">
+      <div class="section-toolbar">
+        <div>
+          <div class="section-kicker">Конфигурация консоли</div>
+          <h2 class="section-title">Настройки</h2>
+          <p class="section-copy">Публичные параметры подключения и внешний вид MailAdmin.</p>
+        </div>
+        <button class="ghost-btn" id="settingsRefreshBtn" type="button">Обновить</button>
+      </div>
+      <div class="admin-settings-grid">
+        <section class="data-panel settings-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Почтовый сервер</h2>
+              <p class="panel-copy">Параметры для подключения пользователей. Секреты здесь не отображаются.</p>
+            </div>
+          </div>
+          <dl class="server-settings-list">
+            <div><dt>Домен</dt><dd id="mailSettingsDomain">—</dd></div>
+            <div><dt>RuPochta Mail</dt><dd><a id="mailSettingsWebmailUrl" href="#" target="_blank" rel="noopener">—</a></dd></div>
+            <div><dt>IMAP</dt><dd id="mailSettingsImap">—</dd></div>
+            <div><dt>SMTP</dt><dd id="mailSettingsSmtp">—</dd></div>
+            <div><dt>MailAdmin</dt><dd id="mailSettingsAdminUrl">—</dd></div>
+          </dl>
+          <div id="mailSettingsStatus" class="result-box hidden" aria-live="polite"></div>
+        </section>
+        <section class="data-panel settings-panel identity-settings-panel">
+          <div class="panel-head split">
+            <div>
+              <h2>AD и LDAPS</h2>
+              <p class="panel-copy">Доступ в MailAdmin выполняется только через корпоративную учётную запись AD.</p>
+            </div>
+            <button class="ghost-btn" id="identityCheckBtn" type="button">Проверить связь</button>
+          </div>
+          <div class="identity-settings-body">
+            <div class="identity-status-grid">
+              <div class="identity-status-card">
+                <span>AD</span>
+                <strong id="identitySsoStatus">—</strong>
+                <small id="identitySsoDetails">—</small>
+              </div>
+              <div class="identity-status-card">
+                <span>LDAPS</span>
+                <strong id="identityLdapsStatus">—</strong>
+                <small id="identityLdapsDetails">—</small>
+              </div>
+            </div>
+            <div>
+              <label class="field-label" for="identityAdminGroups">Группы администраторов</label>
+              <select id="identityAdminGroups" class="text-field identity-group-select" multiple size="8"></select>
+              <p class="field-help">Членство в выбранной группе AD разрешает вход в MailAdmin.</p>
+            </div>
+            <div class="action-row">
+              <button class="primary-btn" id="identitySaveBtn" type="button">Сохранить группы</button>
+            </div>
+            <div id="identitySettingsResult" class="result-box hidden" aria-live="polite"></div>
+          </div>
+        </section>
+        <section class="data-panel settings-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Оформление</h2>
+              <p class="panel-copy">Тема сохраняется только в этом браузере.</p>
+            </div>
+          </div>
+          <div class="appearance-setting">
+            <label class="field-label" for="adminThemeMode">Тема интерфейса</label>
+            <select id="adminThemeMode" class="text-field">
+              <option value="system">Как в системе</option>
+              <option value="light">Светлая</option>
+              <option value="dark">Тёмная</option>
+            </select>
+            <p class="field-help">Изменение применяется сразу, без перезагрузки страницы.</p>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <nav class="mobile-bottom-nav workspace-mobile-nav" aria-label="Быстрая навигация">
+    <button class="mobile-tab active" data-section="overview" type="button" aria-current="page">
+      <svg class="mobile-tab-icon"><use href="#icon-home"></use></svg>
+      <span>Обзор</span>
+    </button>
+    <button class="mobile-tab" data-section="mailboxes" type="button" aria-current="false">
+      <svg class="mobile-tab-icon"><use href="#icon-mailbox"></use></svg>
+      <span>Ящики</span>
+    </button>
+    <button class="mobile-tab" data-section="addresses" type="button" aria-current="false">
+      <svg class="mobile-tab-icon"><use href="#icon-link"></use></svg>
+      <span>Адреса</span>
+    </button>
+    <button class="mobile-tab" data-section="diagnostics" type="button" aria-current="false">
+      <svg class="mobile-tab-icon"><use href="#icon-queue"></use></svg>
+      <span>Диагностика</span>
+      <span class="mobile-queue-badge hidden">0</span>
+    </button>
+    <button class="mobile-tab" id="mobileMoreBtn" type="button" aria-current="false">
+      <svg class="mobile-tab-icon"><use href="#icon-more"></use></svg>
+      <span>Ещё</span>
+    </button>
+  </nav>
+</div>
+
+<div class="modal-shell hidden" id="modalManagedAddress" aria-hidden="true">
+  <div class="modal-card managed-address-modal" role="dialog" aria-modal="true" aria-labelledby="managedAddressFormTitle">
+    <div class="modal-head">
+      <div>
+        <div class="modal-kicker">Общий почтовый адрес</div>
+        <h2 id="managedAddressFormTitle">Создание адреса</h2>
+      </div>
+      <button class="icon-btn" data-close="modalManagedAddress" type="button" aria-label="Закрыть">
+        <svg class="ui-icon"><use href="#icon-close"></use></svg>
+      </button>
+    </div>
+    <form id="managedAddressForm" class="modal-body">
+      <input type="hidden" id="managedAddressId">
+      <section id="managedAddressTechnicalPresets" class="technical-preset-panel">
+        <div>
+          <strong>Технические ящики</strong>
+          <p class="field-help">Пресет заполнит роль, адрес и назначение. Пароль создаётся автоматически; IMAP и SMTP используют один логин.</p>
+        </div>
+        <div class="technical-preset-grid">
+          <button class="technical-preset-btn" data-technical-role="bounce" type="button">Недоставленные</button>
+          <button class="technical-preset-btn" data-technical-role="noreply" type="button">No Reply</button>
+          <button class="technical-preset-btn" data-technical-role="support" type="button">Техподдержка</button>
+          <button class="technical-preset-btn" data-technical-role="alerts" type="button">Алерты</button>
+        </div>
+      </section>
+      <div class="managed-address-form-grid">
+        <div>
+          <label class="field-label" for="managedAddressKind">Тип</label>
+          <select id="managedAddressKind" class="text-field" data-modal-initial>
+            <option value="group">Групповой ящик</option>
+            <option value="distribution">Рассылка</option>
+            <option value="service">Сервисный ящик</option>
+            <option value="technical">Технический ящик</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label" for="managedAddressEmail">Email</label>
+          <input type="email" id="managedAddressEmail" class="text-field" placeholder="support@example.com" required>
+        </div>
+      </div>
+      <div>
+        <label class="field-label" for="managedAddressCompany">Компания и каталог</label>
+        <select id="managedAddressCompany" class="text-field" required>
+          <option value="Corp">Corp · corp.local</option>
+          <option value="Alpha">Alpha · alpha.local</option>
+          <option value="Beta">Beta · beta.local</option>
+          <option value="Gamma">Gamma · gamma.local</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label" for="managedAddressDisplayName">Отображаемое имя</label>
+        <input type="text" id="managedAddressDisplayName" class="text-field" placeholder="Поддержка">
+      </div>
+      <div id="managedAddressServiceFields" class="managed-address-form-grid hidden">
+        <div id="managedAddressTechnicalRoleField" class="hidden">
+          <label class="field-label" for="managedAddressTechnicalRole">Техническая роль</label>
+          <select id="managedAddressTechnicalRole" class="text-field">
+            <option value="">Выберите роль</option>
+            <option value="bounce">Сборщик недоставленных сообщений</option>
+            <option value="noreply">No Reply</option>
+            <option value="support">Техническая поддержка</option>
+            <option value="alerts">Системные алерты</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label" for="managedAddressResponsibleSelect">Ответственный</label>
+          <select id="managedAddressResponsibleSelect" class="text-field">
+            <option value="">Выберите сотрудника</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label" for="managedAddressDescription">Назначение</label>
+          <input type="text" id="managedAddressDescription" class="text-field" placeholder="Для какого сервиса используется ящик">
+        </div>
+      </div>
+      <div id="managedAddressMembers">
+        <label class="field-label" for="managedAddressMemberSelect">Почтовые ящики участников</label>
+        <select id="managedAddressMemberSelect" class="text-field mailbox-picker" multiple size="7"></select>
+        <p class="field-help">Выберите один или несколько существующих ящиков. Для выбранных ящиков разрешены чтение и отправка.</p>
+        <label class="field-label" for="managedAddressMemberLines">Дополнительные участники и права</label>
+        <textarea id="managedAddressMemberLines" class="text-field textarea-field" placeholder="read:user2@example.com"></textarea>
+        <p class="field-help">Необязательно. По одному адресу в строке; префикс read: оставляет только чтение.</p>
+        <label class="field-label" for="managedAddressGroupSelect">Группы доступа из AD</label>
+        <select id="managedAddressGroupSelect" class="text-field identity-group-select" multiple size="7"></select>
+        <label class="checkbox-row compact-checkbox">
+          <input type="checkbox" id="managedAddressGroupSend" checked>
+          <span>Разрешить участникам выбранных групп отправку от имени ящика</span>
+        </label>
+        <p class="field-help">Доступ пересчитывается по текущему членству в AD. При недоступном LDAPS групповой доступ временно закрывается.</p>
+      </div>
+      <div id="managedAddressRecipients" class="hidden">
+        <label class="field-label" for="managedAddressRecipientSelect">Почтовые ящики получателей</label>
+        <select id="managedAddressRecipientSelect" class="text-field mailbox-picker" multiple size="7"></select>
+        <p class="field-help">Выберите один или несколько существующих ящиков.</p>
+        <label class="field-label" for="managedAddressRecipientLines">Дополнительные получатели</label>
+        <textarea id="managedAddressRecipientLines" class="text-field textarea-field" placeholder="partner@example.com"></textarea>
+        <p class="field-help">Необязательно. Внешние адреса указываются по одному в строке. У рассылки нет собственного ящика и пароля.</p>
+      </div>
+      <div id="managedAddressResult" class="result-box hidden"></div>
+    </form>
+    <div class="modal-actions">
+      <button class="ghost-btn" data-close="modalManagedAddress" type="button">Отмена</button>
+      <button class="primary-btn" id="managedAddressSaveBtn" type="button">Создать</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-shell hidden" id="managedAddressDeleteModal" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="managedAddressDeleteTitle">
+    <div class="modal-head">
+      <h2 id="managedAddressDeleteTitle">Удаление общего адреса</h2>
+      <button class="icon-btn" data-close="managedAddressDeleteModal" type="button" aria-label="Закрыть">
+        <svg class="ui-icon"><use href="#icon-close"></use></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-copy" id="managedAddressDeleteCopy">Адрес и его настройки будут удалены.</p>
+      <div id="managedAddressDeleteEmail" class="danger-box"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost-btn" data-close="managedAddressDeleteModal" type="button">Отмена</button>
+      <button class="danger-btn" id="managedAddressDeleteConfirmBtn" type="button">Удалить адрес</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-shell hidden" id="modalPwd" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="pwdModalTitle">
+    <div class="modal-head">
+      <h2 id="pwdModalTitle">Сброс пароля почтового ящика</h2>
+      <button class="icon-btn" data-close="modalPwd" type="button" aria-label="Закрыть">
+        <svg class="ui-icon"><use href="#icon-close"></use></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div>
+        <label class="field-label" for="pwdEmail">Почтовый ящик</label>
+        <input type="text" id="pwdEmail" class="text-field" readonly>
+      </div>
+      <div>
+        <label class="field-label" for="pwdNew">Новый пароль</label>
+        <input type="text" id="pwdNew" class="text-field" placeholder="Оставьте пустым для автогенерации" data-modal-initial>
+      </div>
+      <div id="pwdResult" class="result-box hidden"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost-btn" data-close="modalPwd" type="button">Отмена</button>
+      <button class="primary-btn" id="pwdConfirmBtn" type="button">Сбросить пароль</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-shell hidden" id="modalDel" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+    <div class="modal-head">
+      <h2 id="deleteModalTitle">Удаление почтового ящика</h2>
+      <button class="icon-btn" data-close="modalDel" type="button" aria-label="Закрыть">
+        <svg class="ui-icon"><use href="#icon-close"></use></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-copy">Все письма и данные ящика будут удалены без возможности восстановления.</p>
+      <div id="delEmailDisplay" class="danger-box"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost-btn" data-close="modalDel" type="button">Отмена</button>
+      <button class="danger-btn" id="delConfirmBtn" type="button">Удалить ящик</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-shell hidden" id="modalLifecycle" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="lifecycleTitle">
+    <div class="modal-head">
+      <div>
+        <h2 id="lifecycleTitle">Состояние почтового ящика</h2>
+        <div class="modal-copy" id="lifecycleCopy">Укажите причину действия.</div>
+      </div>
+      <button class="icon-btn" data-close="modalLifecycle" type="button" aria-label="Закрыть">
+        <svg class="ui-icon"><use href="#icon-close"></use></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div>
+        <label class="field-label" for="lifecycleEmail">Почтовый ящик</label>
+        <input type="text" id="lifecycleEmail" class="text-field" readonly>
+      </div>
+      <div>
+        <label class="field-label" for="lifecycleReason">Причина</label>
+        <textarea id="lifecycleReason" class="text-field textarea-field" placeholder="Например: инцидент безопасности, увольнение или временная блокировка" data-modal-initial></textarea>
+      </div>
+      <div id="lifecycleResult" class="result-box hidden"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost-btn" data-close="modalLifecycle" type="button">Отмена</button>
+      <button class="primary-btn" id="lifecycleConfirmBtn" type="button">Применить</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-shell hidden" id="modalCredentialPack" aria-hidden="true">
+  <div class="modal-card credential-modal" role="dialog" aria-modal="true" aria-labelledby="credentialTitle">
+    <div class="modal-head">
+      <div>
+        <div class="modal-kicker">Данные подключения</div>
+        <h2 id="credentialTitle">Параметры почтового ящика</h2>
+      </div>
+      <button class="icon-btn" data-close="modalCredentialPack" type="button" aria-label="Закрыть">
+        <svg class="ui-icon"><use href="#icon-close"></use></svg>
+      </button>
+    </div>
+    <div class="modal-body credential-grid">
+      <section class="credential-main">
+        <div id="credentialSummary" class="credential-summary"></div>
+        <div class="credential-actions">
+          <button class="primary-btn" id="copyCredentialSummaryBtn" type="button">Скопировать всё</button>
+          <button class="ghost-btn" id="copyCredentialPasswordBtn" type="button">Скопировать пароль</button>
+        </div>
+      </section>
+      <section class="credential-side">
+        <div class="qr-card">
+          <div class="qr-head">Thunderbird для Android</div>
+          <div id="tbQr" class="qr-box"></div>
+          <div class="qr-actions">
+            <button class="ghost-btn" id="copyThunderbirdPayloadBtn" type="button">Скопировать данные</button>
+          </div>
+        </div>
+        <div class="qr-card">
+          <div class="qr-head">Delta Chat</div>
+          <div id="dcQr" class="qr-box"></div>
+          <div class="qr-actions">
+            <button class="ghost-btn" id="copyDeltaPayloadBtn" type="button">Скопировать ссылку</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="modal-shell hidden" id="admin-profile-modal" aria-hidden="true">
+  <div class="modal-card personal-profile-card" role="dialog" aria-modal="true" aria-labelledby="adminProfileTitle">
+    <div class="modal-head">
+      <div class="personal-profile-identity">
+        <span id="admin-profile-dialog-avatar" class="personal-profile-dialog-avatar" aria-hidden="true">
+          <svg class="ui-icon"><use href="#icon-user"></use></svg>
+        </span>
+        <div>
+          <div class="modal-kicker">Личный кабинет</div>
+          <h2 id="adminProfileTitle">Профиль администратора</h2>
+          <span id="admin-profile-role" class="personal-profile-role">ИТ-специалист</span>
+        </div>
+      </div>
+      <button class="icon-btn" data-close="admin-profile-modal" type="button" aria-label="Закрыть">
+        <svg class="ui-icon"><use href="#icon-close"></use></svg>
+      </button>
+    </div>
+    <div id="admin-profile-details" class="personal-profile-details"></div>
+    <section id="admin-profile-integrations" class="personal-profile-integrations hidden">
+      <h3>ИТ-привязки</h3>
+      <div id="admin-profile-integration-list"></div>
+    </section>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="/static/qrcode.min.js"></script>
+<script src="/static/admin.js?v=20260611-session-security"></script>
+</body>
+</html>
