@@ -150,6 +150,9 @@ class Config:
     IMAP_PORT = int(os.environ.get("MAIL_IMAP_PORT", os.environ.get("IMAP_PORT", "993")))
     SMTP_HOST = os.environ.get("MAIL_SMTP_HOST", os.environ.get("SMTP_HOST", MAIL_HOST))
     SMTP_PORT = int(os.environ.get("MAIL_SMTP_PORT", os.environ.get("SMTP_PORT", "587")))
+    SMTP_VERIFY_TLS = os.environ.get("MAIL_SMTP_VERIFY_TLS", "1").strip().lower() not in {
+        "0", "false", "no", "off"
+    }
     MAIL_DOMAIN = os.environ.get("MAIL_DOMAIN", "example.com")
     MAIL_PUBLIC_HOST = os.environ.get("MAIL_PUBLIC_HOST", f"mail.{MAIL_DOMAIN}")
     MAIL_PUBLIC_IMAP_PORT = int(os.environ.get("MAIL_PUBLIC_IMAP_PORT", "993"))
@@ -3885,9 +3888,14 @@ def smtp_send(
     recipients = [r for r in (to + cc + bcc) if r]
     raw = msg.as_bytes()
 
+    # Certificates are verified by default. Only a deployment whose submission
+    # host is a local relay with a self-signed certificate may opt out, and it
+    # has to say so explicitly — an unverified TLS session to a remote provider
+    # would expose the mailbox password this call is about to send.
     ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    if not CFG.SMTP_VERIFY_TLS:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
     with smtplib.SMTP(CFG.SMTP_HOST, CFG.SMTP_PORT, timeout=20) as s:
         s.ehlo()
         s.starttls(context=ctx)

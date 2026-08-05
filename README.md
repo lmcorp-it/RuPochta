@@ -51,6 +51,7 @@ Caddy), который терминирует TLS и передаёт `X-Real-IP
 | `WEBMAIL_SECRET_KEY` | подпись сессионных куки (обязательна) |
 | `MAIL_ADMIN_KEY` | ключ админского API (обязателен) |
 | `WEBMAIL_DB` | путь к SQLite-базе служебного состояния |
+| `MAIL_SMTP_VERIFY_TLS` | проверка сертификата при отправке, по умолчанию включена; `0` — только для локального релея с самоподписанным сертификатом |
 | `MAIL_SSO_ISSUER`, `MAIL_SSO_CLIENT_ID`, `MAIL_SSO_CLIENT_SECRET` | OIDC-вход |
 | `MAILADMIN_LDAPS_URLS`, `MAILADMIN_LDAPS_BASE_DN`, `MAILADMIN_LDAPS_BIND_USER`, `LDAP_BIND_PASS` | каталог AD |
 | `MAILADMIN_LDAP_ADMIN_GROUPS` | DN групп админов, через `;` |
