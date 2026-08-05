@@ -1,0 +1,41 @@
+{
+  "name": "RuPochta",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/node:1": { "version": "lts" }
+  },
+
+  "postCreateCommand": "pip install --user -r requirements.txt",
+
+  // Приложение слушает 18400; порт открывается приватной ссылкой на владельца
+  // Codespace — публиковать его наружу не нужно.
+  "forwardPorts": [18400],
+  "portsAttributes": {
+    "18400": { "label": "RuПочта", "onAutoForward": "notify" }
+  },
+
+  "containerEnv": {
+    "WEBMAIL_DB": "/tmp/rupochta-dev.sqlite",
+    "MAIL_ADMIN_KEY": "dev",
+    "WEBMAIL_SECRET_KEY": "dev-secret-not-for-production"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.debugpy",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.testing.unittestEnabled": true,
+        "python.testing.unittestArgs": ["-s", "tests", "-p", "test_*.py"],
+        "files.trimTrailingWhitespace": true,
+        "files.insertFinalNewline": true
+      }
+    }
+  }
+}

@@ -19,6 +19,28 @@
 
 Нужен Python 3.11+ и git. Почтовый сервер для запуска тестов **не нужен**.
 
+### В браузере, без установки
+
+[![Открыть в Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/lmcorp-it/RuPochta)
+
+Codespace поднимается из [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json):
+Python 3.12, зависимости уже поставлены, переменные для разработки заданы,
+порт 18400 пробрасывается приватной ссылкой. Достаточно выполнить
+
+```bash
+python -m uvicorn rupochta_server:app --reload --port 18400
+```
+
+и открыть проброшенный порт. Работает с любого устройства, включая планшет.
+
+Тот же файл понимают VS Code с расширением Dev Containers и JetBrains Gateway —
+можно поднять окружение локально в Docker, ничего не настраивая руками.
+
+Быстро поправить текст или разметку можно вообще без окружения: нажмите
+<kbd>.</kbd> на странице репозитория — откроется веб-редактор `github.dev`.
+
+### Локально
+
 **Linux / macOS**
 
 ```bash

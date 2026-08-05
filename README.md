@@ -9,6 +9,8 @@
 [![PRs welcome](https://img.shields.io/badge/PR-приветствуются-ed1b2f.svg)](CONTRIBUTING.md)
 ![python](https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13-1750d8.svg)
 
+[![Открыть в Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/lmcorp-it/RuPochta)
+
 [rupochta.tech](https://rupochta.tech) · [рупочта.рф](https://рупочта.рф) ·
 [Обсуждения](https://github.com/lmcorp-it/RuPochta/discussions) ·
 [Как участвовать](CONTRIBUTING.md)
