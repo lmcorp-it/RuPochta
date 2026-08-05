@@ -314,6 +314,16 @@ class Config:
     MAILSERVER_MODE = os.environ.get("WEBMAIL_LOCAL_MAILSERVER", "auto").strip().lower()
     RUNTIME_MODE = os.environ.get("WEBMAIL_RUNTIME_MODE", "").strip().lower()
 
+    # Public self-registration (рупочта.рф). Off unless a deployment opts in:
+    # a corporate installation must never grow open signup by upgrading.
+    PUBLIC_SIGNUP = os.environ.get("MAIL_PUBLIC_SIGNUP", "").strip().lower()
+    PUBLIC_SIGNUP_DOMAIN = os.environ.get("MAIL_PUBLIC_SIGNUP_DOMAIN", "").strip().lower()
+    PUBLIC_SIGNUP_MIN_PASSWORD = int(
+        os.environ.get("MAIL_PUBLIC_SIGNUP_MIN_PASSWORD", "10") or 10
+    )
+    PUBLIC_SIGNUP_PER_HOUR = int(os.environ.get("MAIL_PUBLIC_SIGNUP_PER_HOUR", "3") or 3)
+    PUBLIC_SIGNUP_TERMS_URL = os.environ.get("MAIL_PUBLIC_SIGNUP_TERMS_URL", "").strip()
+
 
 CFG = Config()
 
@@ -17999,6 +18009,232 @@ async def api_calendar_config(request: Request):
         "requires_auth": True,
         "auth_hint": "Используйте тот же пароль, что и для почты.",
     }
+
+
+# ---------------------------------------------------------------------------
+# Public self-registration (рупочта.рф)
+# ---------------------------------------------------------------------------
+# рупочта.рф is the open service anyone may take a mailbox on. Everything below
+# is inert unless MAIL_PUBLIC_SIGNUP is switched on, so a corporate deployment
+# that upgrades never suddenly accepts strangers.
+
+_PUBLIC_SIGNUP_LOCAL_RE = re.compile(r"^[a-z0-9][a-z0-9._\-]{2,29}$")
+_PUBLIC_SIGNUP_WINDOW = int(os.environ.get("MAIL_PUBLIC_SIGNUP_WINDOW", "3600") or 3600)
+
+# Addresses that must stay with the operator: RFC 2142 roles, anything that can
+# be mistaken for the service itself, and the usual abuse magnets.
+_PUBLIC_SIGNUP_RESERVED = frozenset({
+    "abuse", "admin", "administrator", "all", "api", "billing", "ceo", "contact",
+    "dmarc", "dns", "everyone", "ftp", "help", "hostmaster", "imap", "info",
+    "it", "legal", "list", "mail", "mailer-daemon", "mailerdaemon", "manager",
+    "marketing", "master", "news", "noc", "noreply", "no-reply", "notify",
+    "office", "operator", "owner", "postmaster", "president", "press", "root",
+    "sales", "security", "service", "smtp", "spam", "ssl", "staff", "support",
+    "sysadmin", "system", "team", "test", "tls", "usenet", "uucp", "webmaster",
+    "www", "rupochta", "рупочта", "почта",
+})
+
+
+def _public_signup_enabled() -> bool:
+    return str(CFG.PUBLIC_SIGNUP or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _public_signup_domain() -> str:
+    return (CFG.PUBLIC_SIGNUP_DOMAIN or CFG.MAIL_DOMAIN or "").strip().lower()
+
+
+def _public_signup_rate_allow(ip: str) -> bool:
+    """One bucket per client address, counting every attempt, not just failures."""
+    if not ip:
+        return True
+    limit = max(1, int(CFG.PUBLIC_SIGNUP_PER_HOUR or 1))
+    cutoff = time.time() - _PUBLIC_SIGNUP_WINDOW
+    with _rate_lock:
+        bucket = _RATE_BUCKETS.setdefault("public_signup", {})
+        events = [t for t in bucket.get(ip, []) if t > cutoff]
+        bucket[ip] = events
+        return len(events) < limit
+
+
+def _public_signup_rate_record(ip: str) -> None:
+    if not ip:
+        return
+    cutoff = time.time() - _PUBLIC_SIGNUP_WINDOW
+    with _rate_lock:
+        bucket = _RATE_BUCKETS.setdefault("public_signup", {})
+        events = [t for t in bucket.get(ip, []) if t > cutoff]
+        events.append(time.time())
+        bucket[ip] = events
+
+
+def validate_public_signup_login(raw_login: str) -> Tuple[str, str]:
+    """Return (login, error). An empty error means the login may be registered."""
+    login = str(raw_login or "").strip().lower()
+    if "@" in login:
+        # Pasting the whole address is fine, but only for the domain we hand
+        # out: silently turning ivan@gmail.com into ivan@<our domain> would
+        # hand someone an address they did not ask for.
+        local, _, typed_domain = login.partition("@")
+        expected = _public_signup_domain()
+        if typed_domain and expected and typed_domain != expected:
+            return local, f"Регистрация идёт только на домене @{expected}."
+        login = local
+    if not login:
+        return "", "Укажите имя ящика."
+    if not _PUBLIC_SIGNUP_LOCAL_RE.match(login):
+        return login, (
+            "Имя ящика: 3–30 символов, латиница, цифры, точка, дефис "
+            "или подчёркивание; начинается с буквы или цифры."
+        )
+    if ".." in login or login.endswith((".", "-", "_")):
+        return login, "Имя ящика не может заканчиваться разделителем или содержать «..»."
+    if login in _PUBLIC_SIGNUP_RESERVED:
+        return login, "Это имя зарезервировано за службой поддержки сервиса."
+    return login, ""
+
+
+def validate_public_signup_password(password: str, login: str) -> str:
+    """Return an error message, or an empty string when the password is fine."""
+    value = str(password or "")
+    minimum = max(8, int(CFG.PUBLIC_SIGNUP_MIN_PASSWORD or 10))
+    if len(value) < minimum:
+        return f"Пароль должен быть не короче {minimum} символов."
+    if value.strip().lower() == str(login or "").strip().lower():
+        return "Пароль не может совпадать с именем ящика."
+    if value.lower() in {"password", "пароль", "12345678901", "qwertyuiop"}:
+        return "Этот пароль слишком простой."
+    return ""
+
+
+class PublicSignupBody(BaseModel):
+    login: str = Field(..., min_length=1, max_length=64)
+    password: str = Field(..., min_length=1, max_length=200)
+
+
+@app.get("/api/signup/config")
+async def api_public_signup_config():
+    """Tell the sign-up page whether it may offer registration, and on what terms."""
+    enabled = _public_signup_enabled()
+    return JSONResponse(
+        {
+            "enabled": enabled,
+            "provisioning_ready": bool(enabled and _mail_admin_available()),
+            "domain": _public_signup_domain() if enabled else "",
+            "min_password": max(8, int(CFG.PUBLIC_SIGNUP_MIN_PASSWORD or 10)),
+            "per_hour": max(1, int(CFG.PUBLIC_SIGNUP_PER_HOUR or 1)),
+            "terms_url": CFG.PUBLIC_SIGNUP_TERMS_URL,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/signup")
+async def api_public_signup(body: PublicSignupBody, request: Request, response: Response):
+    """Register a mailbox on the public domain and sign the visitor in."""
+    if not _public_signup_enabled():
+        return JSONResponse(
+            {"error": "Публичная регистрация на этом сервере отключена."},
+            status_code=403,
+        )
+    if not _is_same_origin_admin_request(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    ip = _client_ip(request)
+    if not _public_signup_rate_allow(ip):
+        return JSONResponse(
+            {
+                "error": (
+                    "Слишком много регистраций с этого адреса. "
+                    "Попробуйте позже или напишите в поддержку."
+                )
+            },
+            status_code=429,
+        )
+
+    login, login_error = validate_public_signup_login(body.login)
+    if login_error:
+        return JSONResponse({"error": login_error, "field": "login"}, status_code=400)
+    password_error = validate_public_signup_password(body.password, login)
+    if password_error:
+        return JSONResponse({"error": password_error, "field": "password"}, status_code=400)
+
+    domain = _public_signup_domain()
+    if not domain:
+        return JSONResponse(
+            {"error": "Домен регистрации не настроен на сервере."},
+            status_code=503,
+        )
+    if not _mail_admin_available():
+        return JSONResponse(
+            {
+                "error": (
+                    "Сервер не может завести ящик самостоятельно: "
+                    "локальный почтовый сервер не подключён."
+                )
+            },
+            status_code=503,
+        )
+
+    email = f"{login}@{domain}"
+    # Counted before the attempt, so a burst of failures cannot be used to
+    # enumerate which names are already taken.
+    _public_signup_rate_record(ip)
+
+    ok, status = await asyncio.get_event_loop().run_in_executor(
+        None,
+        _mailserver_add_user_direct,
+        email,
+        body.password,
+    )
+    if not ok:
+        log.warning("public signup failed for %s: %s", email, status)
+        db_audit_log("public-signup", "signup.failed", email, details={"status": status}, ip=ip, ok=False)
+        return JSONResponse(
+            {"error": "Не удалось завести ящик. Попробуйте позже."},
+            status_code=502,
+        )
+    if status == "already exists":
+        return JSONResponse(
+            {"error": "Этот адрес уже занят. Выберите другое имя.", "field": "login"},
+            status_code=409,
+        )
+
+    db_audit_log("public-signup", "signup.created", email, ip=ip)
+
+    # Sign the new owner in straight away, but never fail the registration over
+    # it: the mailbox exists either way and the login page still works.
+    session_started = False
+    try:
+        sess_data = await _build_authenticated_session_payload(login, email, body.password)
+        token = session_create(sess_data)
+        response.set_cookie(
+            CFG.SESSION_COOKIE,
+            token,
+            max_age=CFG.SESSION_TTL,
+            httponly=True,
+            samesite="lax",
+            secure=urllib.parse.urlparse(CFG.MAIL_SSO_PUBLIC_URL).scheme == "https",
+            path="/",
+        )
+        session_started = True
+    except Exception as exc:
+        log.info("public signup session for %s not started: %s", email, exc)
+
+    return {
+        "ok": True,
+        "email": email,
+        "login": login,
+        "domain": domain,
+        "session": session_started,
+    }
+
+
+@app.get("/signup")
+async def serve_signup():
+    signup_path = Path(CFG.STATIC_DIR) / "signup.html"
+    if signup_path.exists():
+        return FileResponse(signup_path)
+    return JSONResponse({"error": "static/signup.html missing"}, status_code=500)
 
 
 @app.get("/admin")

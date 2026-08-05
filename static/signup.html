@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>RuПочта — регистрация ящика</title>
+  <link rel="stylesheet" href="/static/workspace.css?v=20260618c">
+  <link rel="stylesheet" href="/static/style.css?v=20260803-login-banner2">
+  <link rel="stylesheet" href="/static/focus.css?v=20260618c">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0b1d45">
+<link rel="icon" type="image/png" href="/static/brand/icon-192.png">
+<link rel="apple-touch-icon" href="/static/brand/icon-192.png">
+<style>
+  .signup-suffix {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+  .signup-suffix input { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .signup-domain {
+    display: inline-flex;
+    align-items: center;
+    height: 48px;
+    padding: 0 12px;
+    border: 1px solid var(--border, #cbdcf5);
+    border-left: 0;
+    border-radius: 0 10px 10px 0;
+    background: var(--blueprint, #eaf1ff);
+    color: var(--muted, #5b6b86);
+    font-size: 0.95rem;
+    white-space: nowrap;
+  }
+  .signup-note { color: var(--muted, #5b6b86); font-size: 0.85rem; margin-top: 4px; }
+  .signup-ok { color: var(--success, #137b59); font-weight: 600; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body data-appearance="workspace">
+
+<div id="login-screen" class="login-screen">
+  <header class="mail-services-header">
+    <a class="mail-services-brand" href="/" aria-label="RuПочта — на главную"><img src="/static/brand/rupochta-wordmark.svg" alt="RuПочта"></a>
+  </header>
+
+  <main class="login-shell">
+    <section class="login-card">
+      <div class="login-card-head">
+        <h2 id="signup-title">Заведите почтовый ящик</h2>
+        <p class="signup-note" id="signup-subtitle">Проверяем, открыта ли регистрация…</p>
+      </div>
+
+      <div id="signup-unavailable" class="error-msg" role="status" hidden></div>
+
+      <form id="signup-form" class="login-form" hidden>
+        <div class="login-credentials">
+          <label class="login-field" for="signup-login">
+            <span>Имя ящика</span>
+            <span class="signup-suffix">
+              <input type="text" id="signup-login" autocomplete="username"
+                     inputmode="latin" spellcheck="false" required
+                     placeholder="ivan.petrov">
+              <span class="signup-domain" id="signup-domain">@…</span>
+            </span>
+            <span class="signup-note">3–30 символов: латиница, цифры, точка, дефис, подчёркивание.</span>
+          </label>
+
+          <label class="login-field" for="signup-password">
+            <span>Пароль</span>
+            <input type="password" id="signup-password" autocomplete="new-password" required>
+            <span class="signup-note" id="signup-password-note">Не короче 10 символов.</span>
+          </label>
+
+          <label class="login-field" for="signup-password2">
+            <span>Пароль ещё раз</span>
+            <input type="password" id="signup-password2" autocomplete="new-password" required>
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-primary login-submit" id="signup-submit">
+          Создать ящик
+        </button>
+        <div id="signup-error" class="error-msg" role="alert"></div>
+        <div id="signup-success" class="login-hint signup-ok" role="status" aria-live="polite"></div>
+      </form>
+
+      <footer class="login-footer">
+        <span><a href="/">Уже есть ящик? Войти</a></span>
+        <span id="signup-terms"></span>
+      </footer>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const form = document.getElementById("signup-form");
+  const subtitle = document.getElementById("signup-subtitle");
+  const unavailable = document.getElementById("signup-unavailable");
+  const domainLabel = document.getElementById("signup-domain");
+  const passwordNote = document.getElementById("signup-password-note");
+  const errorBox = document.getElementById("signup-error");
+  const successBox = document.getElementById("signup-success");
+  const submit = document.getElementById("signup-submit");
+  const termsSlot = document.getElementById("signup-terms");
+
+  let config = { min_password: 10, domain: "" };
+
+  function showUnavailable(message) {
+    subtitle.textContent = "";
+    unavailable.textContent = message;
+    unavailable.hidden = false;
+    form.hidden = true;
+  }
+
+  async function loadConfig() {
+    let payload;
+    try {
+      const response = await fetch("/api/signup/config", { headers: { Accept: "application/json" } });
+      payload = await response.json();
+    } catch (error) {
+      showUnavailable("Сервер регистрации сейчас недоступен. Попробуйте позже.");
+      return;
+    }
+    if (!payload || !payload.enabled) {
+      showUnavailable("Публичная регистрация на этом сервере отключена. Ящик заводит администратор.");
+      return;
+    }
+    if (!payload.provisioning_ready) {
+      showUnavailable("Регистрация временно недоступна: почтовый сервер не отвечает. Попробуйте позже.");
+      return;
+    }
+    config = payload;
+    domainLabel.textContent = "@" + payload.domain;
+    subtitle.textContent = "Адрес вида имя@" + payload.domain + " — бесплатно и сразу.";
+    passwordNote.textContent = "Не короче " + payload.min_password + " символов.";
+    if (payload.terms_url) {
+      const link = document.createElement("a");
+      link.href = payload.terms_url;
+      link.textContent = "Условия использования";
+      link.rel = "noopener";
+      termsSlot.appendChild(link);
+    }
+    form.hidden = false;
+  }
+
+  function fail(message, field) {
+    errorBox.textContent = message;
+    successBox.textContent = "";
+    if (field === "login") {
+      document.getElementById("signup-login").focus();
+    } else if (field === "password") {
+      document.getElementById("signup-password").focus();
+    }
+  }
+
+  form.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    errorBox.textContent = "";
+    successBox.textContent = "";
+
+    const login = document.getElementById("signup-login").value.trim().toLowerCase();
+    const password = document.getElementById("signup-password").value;
+    const confirmation = document.getElementById("signup-password2").value;
+
+    if (password !== confirmation) {
+      fail("Пароли не совпадают.", "password");
+      return;
+    }
+    if (password.length < config.min_password) {
+      fail("Пароль должен быть не короче " + config.min_password + " символов.", "password");
+      return;
+    }
+
+    submit.disabled = true;
+    submit.textContent = "Создаём ящик…";
+    try {
+      const response = await fetch("/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ login: login, password: password }),
+      });
+      const payload = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        fail(payload.error || "Не удалось завести ящик.", payload.field);
+        return;
+      }
+      form.hidden = true;
+      unavailable.hidden = true;
+      subtitle.textContent = "";
+      successBox.hidden = false;
+      if (payload.session) {
+        successBox.textContent = "Ящик " + payload.email + " создан. Открываем почту…";
+        window.setTimeout(function () { window.location.href = "/"; }, 900);
+      } else {
+        successBox.textContent = "Ящик " + payload.email + " создан. Войдите с этим адресом и паролем.";
+        form.hidden = true;
+      }
+    } catch (error) {
+      fail("Сеть недоступна. Проверьте соединение и попробуйте ещё раз.");
+    } finally {
+      submit.disabled = false;
+      submit.textContent = "Создать ящик";
+    }
+  });
+
+  loadConfig();
+})();
+</script>
+</body>
+</html>
