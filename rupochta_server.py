@@ -13586,6 +13586,8 @@ class AdminSsoBindingBody(BaseModel):
     imap_host: Optional[str] = None
     imap_port: Optional[int] = None
     provider: Optional[str] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
 
 
 class AdminSsoBindingsBody(BaseModel):
@@ -13595,6 +13597,8 @@ class AdminSsoBindingsBody(BaseModel):
     imap_host: Optional[str] = None
     imap_port: Optional[int] = None
     provider: Optional[str] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
 
 
 class AdminSsoBindingStatusBody(BaseModel):
@@ -15208,6 +15212,8 @@ async def api_admin_sso_binding(body: AdminSsoBindingBody, request: Request):
                 imap_host=imap_host,
                 imap_port=imap_port,
                 provider=provider,
+                smtp_host=body.smtp_host,
+                smtp_port=body.smtp_port,
             ),
         )
     except ValueError as exc:
@@ -15267,6 +15273,8 @@ async def api_admin_sso_binding_bulk(
             imap_host=imap_host,
             imap_port=imap_port,
             provider=provider,
+            smtp_host=body.smtp_host,
+            smtp_port=body.smtp_port,
         ),
     )
     return {
