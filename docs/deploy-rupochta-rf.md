@@ -89,6 +89,21 @@ sudo ./deploy/bootstrap-rupochta-rf.sh --rename
 
 ---
 
+### Шаги 1–2 кнопкой в GitHub Actions
+
+Самый короткий путь, если до гипервизора нет доступа с рабочей машины: раннер
+GitHub дотягивается до Proxmox сам.
+
+1. Settings → Secrets and variables → Actions → добавить секрет `PVE_PASSWORD`
+   (пароль учётной записи из поля `pve_user`).
+2. Actions → **deploy рупочта.рф** → Run workflow. По умолчанию это сухой
+   прогон: галочка `apply` включает выполнение, отдельная галочка
+   `purge_mailboxes` — удаление ящиков lets-mobile.
+
+Воркфлоу запускает `pve-remote-provision.py`, а после — `verify-rupochta-rf.sh`
+против публичного адреса. Он объявлен в окружении `production`: если добавить
+туда обязательных ревьюеров, запуск потребует подтверждения.
+
 ### Шаги 1–2 одной командой, через Proxmox API
 
 Если до гипервизора есть доступ по HTTPS (порт 8006), переименование и
