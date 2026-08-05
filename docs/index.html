@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RuПочта — открытая почта для команды</title>
+<meta name="description" content="Открытый почтовый клиент и админ-панель поверх IMAP и SMTP. Свой сервер, одна установка на Windows, macOS, Linux, Android и iOS. Лицензия MIT.">
+<link rel="icon" href="assets/icon-192.png">
+<meta property="og:title" content="RuПочта — открытая почта для команды">
+<meta property="og:description" content="Открытый почтовый клиент поверх IMAP и SMTP. Свой сервер, все платформы, лицензия MIT.">
+<meta property="og:image" content="https://rupochta.tech/assets/mail-login-banner.webp">
+<meta property="og:type" content="website">
+<style>
+  :root {
+    --blue: #1750d8;
+    --red: #ed1b2f;
+    --ink: #0b1d45;
+    --muted: #55607a;
+    --line: #e3e8f2;
+    --bg: #f6f8fc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 17px/1.6 "Segoe UI", "Helvetica Neue", system-ui, Arial, sans-serif;
+    color: var(--ink);
+    background: #fff;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--blue); }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 26px 0; border-bottom: 1px solid var(--line); }
+  header .wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  header img { height: 44px; }
+  header nav { margin-left: auto; display: flex; gap: 22px; font-size: 15px; }
+  header nav a { color: var(--muted); text-decoration: none; }
+  header nav a:hover { color: var(--blue); }
+
+  .hero { padding: 72px 0 56px; background: linear-gradient(180deg, #fff, var(--bg)); }
+  .hero .wrap { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 48px; align-items: center; }
+  .hero h1 { font-size: 46px; line-height: 1.12; margin: 0 0 18px; letter-spacing: -1px; }
+  .hero h1 b { color: var(--blue); }
+  .hero h1 i { color: var(--red); font-style: normal; }
+  .hero p { font-size: 20px; color: var(--muted); margin: 0 0 28px; }
+  .hero img { width: 100%; height: auto; }
+  .cta { display: flex; gap: 14px; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 13px 26px; border-radius: 10px;
+    text-decoration: none; font-weight: 600;
+  }
+  .btn-primary { background: var(--blue); color: #fff; }
+  .btn-primary:hover { background: #1243b8; }
+  .btn-ghost { border: 1px solid var(--line); color: var(--ink); background: #fff; }
+  .btn-ghost:hover { border-color: var(--blue); color: var(--blue); }
+
+  section { padding: 64px 0; }
+  section.alt { background: var(--bg); border-block: 1px solid var(--line); }
+  h2 { font-size: 30px; margin: 0 0 8px; letter-spacing: -0.5px; }
+  .lead { color: var(--muted); margin: 0 0 34px; font-size: 18px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .card {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    padding: 24px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 18px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15.5px; }
+
+  .platforms { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+  .platform {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px 18px; text-align: center;
+  }
+  .platform strong { display: block; margin-bottom: 6px; }
+  .platform span { color: var(--muted); font-size: 14.5px; }
+
+  pre {
+    background: var(--ink); color: #e8eeff; border-radius: 12px;
+    padding: 20px 22px; overflow-x: auto; font-size: 14.5px; line-height: 1.7;
+  }
+  pre b { color: #8fb4ff; font-weight: 400; }
+
+  .help { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
+  .help a {
+    display: block; background: #fff; border: 1px solid var(--line);
+    border-radius: 14px; padding: 22px 24px; text-decoration: none; color: inherit;
+  }
+  .help a:hover { border-color: var(--blue); }
+  .help strong { display: block; color: var(--blue); margin-bottom: 6px; }
+  .help span { color: var(--muted); font-size: 15.5px; }
+
+  footer { padding: 40px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 15px; }
+  footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+  footer nav { margin-left: auto; display: flex; gap: 18px; }
+
+  @media (max-width: 900px) {
+    .hero .wrap { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 34px; }
+    .grid, .platforms, .help { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 620px) {
+    .grid, .platforms, .help { grid-template-columns: 1fr; }
+    header nav { width: 100%; margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <img src="assets/rupochta-wordmark.svg" alt="RuПочта">
+    <nav>
+      <a href="#features">Возможности</a>
+      <a href="#platforms">Платформы</a>
+      <a href="#install">Установка</a>
+      <a href="#contribute">Участвовать</a>
+      <a href="https://github.com/lmcorp-it/RuPochta">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <div>
+      <h1>Почта команды —<br>на <b>вашем</b> сервере, <i>без</i> чужих условий</h1>
+      <p>Открытый почтовый клиент и админ-панель поверх обычных IMAP и SMTP.
+         Писем у себя не хранит, внешних сервисов не требует, ставится за вечер.
+         Лицензия MIT.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/lmcorp-it/RuPochta">Смотреть на GitHub</a>
+        <a class="btn btn-ghost" href="#install">Как поставить</a>
+      </div>
+    </div>
+    <img src="assets/mail-login-banner.webp" alt="" loading="lazy">
+  </div>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Что это</h2>
+    <p class="lead">Один процесс на Python: интерфейс почты, админ-панель и мост к вашему почтовому серверу.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>Ваши письма остаются вашими</h3>
+        <p>Приложение не хранит почту — оно показывает то, что лежит на вашем IMAP.
+           Убрали приложение, почта осталась на месте.</p>
+      </div>
+      <div class="card">
+        <h3>Работает с любым сервером</h3>
+        <p>Dovecot, Postfix, корпоративный сервер, ящик у провайдера.
+           Внешний ящик подключается по своему IMAP-хосту рядом с основным.</p>
+      </div>
+      <div class="card">
+        <h3>Админ-панель в комплекте</h3>
+        <p>Ящики и алиасы, многодоменный каталог сотрудников,
+           синхронизация с LDAP и Active Directory.</p>
+      </div>
+      <div class="card">
+        <h3>Вход, какой удобен</h3>
+        <p>Пароль почтового ящика или внешний OIDC-провайдер,
+           привязка Telegram.</p>
+      </div>
+      <div class="card">
+        <h3>Ничего лишнего в зависимостях</h3>
+        <p>FastAPI, uvicorn и SQLite для служебного состояния.
+           Фронтенд — обычные HTML, CSS и JS, сборки нет.</p>
+      </div>
+      <div class="card">
+        <h3>MIT без оговорок</h3>
+        <p>Берите, меняйте, ставьте клиентам, стройте на этом сервис.
+           Просить разрешения не нужно.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="platforms">
+  <div class="wrap">
+    <h2>Одна установка — все устройства</h2>
+    <p class="lead">Интерфейс работает как PWA: ярлык, отдельное окно, офлайн-режим и уведомления. Отдельного мобильного приложения не нужно.</p>
+    <div class="platforms">
+      <div class="platform"><strong>Windows</strong><span>Chrome, Edge — «Установить приложение»</span></div>
+      <div class="platform"><strong>macOS</strong><span>Safari — «Добавить в Dock»</span></div>
+      <div class="platform"><strong>Linux</strong><span>Ярлык PWA в GNOME и KDE</span></div>
+      <div class="platform"><strong>Android</strong><span>«На главный экран», push-уведомления</span></div>
+      <div class="platform"><strong>iOS / iPadOS</strong><span>Safari — «На экран "Домой"»</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>Поставить за пару команд</h2>
+    <p class="lead">Нужен Python 3.11 или новее. Обратный прокси — nginx или Caddy — терминирует TLS.</p>
+<pre><b># исходники и зависимости</b>
+git clone https://github.com/lmcorp-it/RuPochta.git &amp;&amp; cd RuPochta
+python3 -m venv .venv &amp;&amp; .venv/bin/pip install -r requirements.txt
+
+<b># свой почтовый контур</b>
+export MAIL_DOMAIN=example.com MAIL_HOST=imap.example.com
+export MAIL_ADMIN_KEY=... WEBMAIL_SECRET_KEY=...
+
+<b># запуск</b>
+.venv/bin/python -m uvicorn rupochta_server:app --host 127.0.0.1 --port 18400</pre>
+    <p style="color:var(--muted)">То же самое в Docker: <code>docker build -t rupochta .</code> и
+       <code>docker run -p 18400:18400 -v rupochta-data:/data rupochta</code>.
+       Полный список переменных — в <a href="https://github.com/lmcorp-it/RuPochta#конфигурация">README</a>.</p>
+  </div>
+</section>
+
+<section class="alt" id="contribute">
+  <div class="wrap">
+    <h2>Проекту нужны люди</h2>
+    <p class="lead">Он молодой и открытый. Задачи описаны с контекстом: видно, какие файлы трогать и как проверить результат. Опыт в почтовых протоколах не требуется.</p>
+    <div class="help">
+      <a href="https://github.com/lmcorp-it/RuPochta/labels/good%20first%20issue">
+        <strong>Первая задача</strong>
+        <span>Небольшие задачи с разобранным контекстом — с них удобно начать.</span>
+      </a>
+      <a href="https://github.com/lmcorp-it/RuPochta/labels/providers">
+        <strong>Яндекс, Mail.ru, VK</strong>
+        <span>Подключение внешних ящиков и отправка через их SMTP.</span>
+      </a>
+      <a href="https://github.com/lmcorp-it/RuPochta/issues/6">
+        <strong>Проверить на своей системе</strong>
+        <span>Установить PWA на Windows, macOS, Linux, Android или iOS и рассказать, что сломалось. Кода не требуется.</span>
+      </a>
+      <a href="https://github.com/lmcorp-it/RuPochta/blob/main/CONTRIBUTING.md">
+        <strong>Как всё устроено</strong>
+        <span>Установка для Linux, macOS и Windows, запуск тестов, правила PR.</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 RuПочта · Лицензия MIT</span>
+    <nav>
+      <a href="https://github.com/lmcorp-it/RuPochta">GitHub</a>
+      <a href="https://github.com/lmcorp-it/RuPochta/discussions">Обсуждения</a>
+      <a href="https://github.com/lmcorp-it/RuPochta/security/advisories/new">Безопасность</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>
