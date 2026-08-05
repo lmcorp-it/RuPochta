@@ -493,6 +493,7 @@
       <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-autoreply" tabindex="-1" data-settings-tab="autoreply">Автоответчик</button>
       <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-signature" tabindex="-1" data-settings-tab="signature">Подпись</button>
       <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-templates" tabindex="-1" data-settings-tab="templates">Шаблоны</button>
+      <button class="settings-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-external" tabindex="-1" data-settings-tab="external">Внешний ящик</button>
     </div>
     <div class="settings-content">
       <section id="settings-panel-identity" role="tabpanel" class="settings-section" data-settings-panel="identity">
@@ -717,6 +718,41 @@
             </div>
           </div>
         </div>
+      </section>
+      <section id="settings-panel-external" role="tabpanel" class="settings-section hidden" data-settings-panel="external">
+        <h4>Внешний ящик</h4>
+        <p class="muted">Читайте и отправляйте письма из ящика на другом сервисе — Яндекс, Mail.ru, VK WorkSpace или свой IMAP. Нужен пароль приложения, а не пароль от аккаунта.</p>
+        <div id="external-mailbox-current" class="settings-readonly-value hidden" aria-live="polite"></div>
+        <form id="external-mailbox-form" class="settings-form">
+          <label>Почтовый сервис
+            <select id="external-mailbox-provider" class="input-plain"></select>
+          </label>
+          <label>Адрес ящика
+            <input type="email" id="external-mailbox-email" class="input-plain" placeholder="name@yandex.ru" autocomplete="email">
+          </label>
+          <label>Пароль приложения
+            <input type="password" id="external-mailbox-password" class="input-plain" autocomplete="off">
+          </label>
+          <div id="external-mailbox-custom" class="settings-form hidden">
+            <label>IMAP-хост
+              <input type="text" id="external-mailbox-imap-host" class="input-plain" placeholder="imap.example.com">
+            </label>
+            <label>IMAP-порт
+              <input type="number" id="external-mailbox-imap-port" class="input-plain" value="993" min="1" max="65535">
+            </label>
+            <label>SMTP-хост
+              <input type="text" id="external-mailbox-smtp-host" class="input-plain" placeholder="smtp.example.com">
+            </label>
+            <label>SMTP-порт
+              <input type="number" id="external-mailbox-smtp-port" class="input-plain" value="465" min="1" max="65535">
+            </label>
+          </div>
+          <div class="settings-actions">
+            <button id="external-mailbox-connect" class="btn btn-primary" type="submit">Подключить</button>
+            <button id="external-mailbox-disconnect" class="btn btn-secondary hidden" type="button">Отключить</button>
+            <span id="external-mailbox-status" class="muted" aria-live="polite"></span>
+          </div>
+        </form>
       </section>
     </div>
   </div>
