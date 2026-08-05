@@ -15438,63 +15438,23 @@ def _admin_session_get(token: str) -> Optional[Dict[str, Any]]:
 
 
 def _client_ip(request: Request) -> str:
-    """Real client IP as seen by the trusted reverse proxy.
-
-    Prefer X-Real-IP (nginx sets it to $remote_addr — not client-appendable).
-    Fall back to the LAST X-Forwarded-For hop: nginx uses
-    $proxy_add_x_forwarded_for, which *appends* the real peer, so the rightmost
-    entry is the trusted one. The leftmost entry is fully attacker-controlled
-    and must never be used for authorization (it would defeat
-    _is_internal_client_ip).
-    """
-    real_ip = (request.headers.get("x-real-ip") or "").strip()
-    if real_ip:
-        return real_ip
-    xff = request.headers.get("x-forwarded-for", "")
-    if xff:
-        hops = [p.strip() for p in xff.split(",") if p.strip()]
-        if hops:
-            return hops[-1]
-    if request.client:
-        return request.client.host
-    return ""
+    """Real client IP as seen by the trusted reverse proxy."""
+    return authentication.get_client_ip(request)
 
 
 def _request_is_https(request: Request) -> bool:
-    proto = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip().lower()
-    if proto:
-        return proto == "https"
-    return (request.url.scheme or "").lower() == "https"
+    """Check if request was made over HTTPS."""
+    return authentication.is_request_https(request)
 
 
 def _request_host(request: Request) -> str:
-    forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",", 1)[0].strip()
-    if forwarded_host:
-        return forwarded_host
-    host = (request.headers.get("host") or "").split(",", 1)[0].strip()
-    if host:
-        return host
-    return (request.url.netloc or "").strip()
+    """Extract Host from request headers, handling proxies."""
+    return authentication.get_request_host(request)
 
 
 def _is_internal_client_ip(client_ip: str) -> bool:
-    text = str(client_ip or "").strip()
-    if not text:
-        return False
-    try:
-        addr = ipaddress.ip_address(text)
-    except ValueError:
-        return False
-    internal_networks = (
-        ipaddress.ip_network("127.0.0.0/8"),
-        ipaddress.ip_network("10.0.0.0/8"),
-        ipaddress.ip_network("172.16.0.0/12"),
-        ipaddress.ip_network("192.168.0.0/16"),
-        ipaddress.ip_network("::1/128"),
-        ipaddress.ip_network("fc00::/7"),
-        ipaddress.ip_network("fe80::/10"),
-    )
-    return any(addr in network for network in internal_networks)
+    """Check if IP is in the internal/private range."""
+    return validation.is_internal_client_ip(client_ip)
 
 
 def _ct_eq(provided: str, expected: str) -> bool:
@@ -15535,18 +15495,19 @@ def _require_mail_admin_api_access(request: Request) -> None:
 
 
 def _is_same_origin_admin_request(request: Request) -> bool:
-    expected_host = _request_host(request)
+    """Check if request is same-origin (with fallback to internal IP check)."""
+    expected_host = authentication.get_request_host(request)
     if not expected_host:
-        return _is_internal_client_ip(_client_ip(request))
-    expected_origin = f"{'https' if _request_is_https(request) else 'http'}://{expected_host}"
-    origin = (request.headers.get("origin") or "").split(",", 1)[0].strip()
+        return _is_internal_client_ip(authentication.get_client_ip(request))
+    expected_origin = authentication.build_expected_origin(request)
+    origin = authentication.get_request_origin(request)
     if origin:
         return origin == expected_origin
-    referer = (request.headers.get("referer") or "").strip()
+    referer = authentication.get_request_referer(request)
     if referer:
         return referer == expected_origin or referer.startswith(expected_origin + "/")
     # Keep internal ops/curl flows working even when browsers omit origin headers.
-    return _is_internal_client_ip(_client_ip(request))
+    return _is_internal_client_ip(authentication.get_client_ip(request))
 
 
 # ---------------------------------------------------------------------------

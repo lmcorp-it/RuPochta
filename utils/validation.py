@@ -37,13 +37,35 @@ def is_valid_ipaddress(ip: Any) -> bool:
         return False
 
 
-def is_internal_client_ip(ip: Any) -> bool:
-    """Check if IP is in the internal/private range (127.0.0.1, ::1, 10.0.0.0/8, etc.)."""
-    try:
-        addr = ipaddress.ip_address(str(ip or ""))
-        return addr.is_private or addr.is_loopback
-    except (ValueError, TypeError):
+def is_internal_client_ip(client_ip: str) -> bool:
+    """Check if IP is in the internal/private range (127.0.0.1, ::1, 10.0.0.0/8, etc.).
+    
+    Uses explicit network ranges to match the security-critical requirements:
+    - 127.0.0.0/8 (IPv4 loopback)
+    - 10.0.0.0/8 (IPv4 private)
+    - 172.16.0.0/12 (IPv4 private)
+    - 192.168.0.0/16 (IPv4 private)
+    - ::1/128 (IPv6 loopback)
+    - fc00::/7 (IPv6 unique local)
+    - fe80::/10 (IPv6 link-local)
+    """
+    text = str(client_ip or "").strip()
+    if not text:
         return False
+    try:
+        addr = ipaddress.ip_address(text)
+    except ValueError:
+        return False
+    internal_networks = (
+        ipaddress.ip_network("127.0.0.0/8"),
+        ipaddress.ip_network("10.0.0.0/8"),
+        ipaddress.ip_network("172.16.0.0/12"),
+        ipaddress.ip_network("192.168.0.0/16"),
+        ipaddress.ip_network("::1/128"),
+        ipaddress.ip_network("fc00::/7"),
+        ipaddress.ip_network("fe80::/10"),
+    )
+    return any(addr in network for network in internal_networks)
 
 
 def is_valid_dn(dn: Any) -> bool:
