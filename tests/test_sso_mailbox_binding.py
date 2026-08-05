@@ -43,7 +43,9 @@ CREATE TABLE IF NOT EXISTS sso_external_mailbox_bindings (
     updated_at TEXT NOT NULL,
     imap_host TEXT NOT NULL,
     imap_port INTEGER NOT NULL,
-    provider TEXT NOT NULL
+    provider TEXT NOT NULL,
+    smtp_host TEXT,
+    smtp_port INTEGER
 )
 """
 
@@ -111,6 +113,7 @@ def _load_binding_helpers(db_path: str, key: bytes):
         "_sso_binding_lookup",
         "_sso_bindings_status",
         "_resolve_provider_hosts",
+        "_resolve_provider_smtp",
     ):
         exec(_extract_function(name), namespace)  # noqa: S102 - trusted own source
     return types.SimpleNamespace(**namespace)
@@ -143,6 +146,7 @@ def _load_imap_connect():
         "ssl": fake_ssl,
         "CFG": types.SimpleNamespace(IMAP_HOST="managed.test", IMAP_PORT=993),
         "_local_mailserver_enabled": lambda: False,
+        "_mailbox_imap_endpoint": lambda _user: (None, None),
     }
     exec(_extract_function("_imap_connect"), namespace)  # noqa: S102 - trusted own source
     return namespace["_imap_connect"], contexts, fake_ssl
@@ -228,6 +232,10 @@ class SsoMailboxBindingTest(unittest.TestCase):
                 ),
             )
             namespace = {"sqlite3": sqlite3}
+            exec(  # noqa: S102 - trusted own source
+                _extract_function("_db_add_column_if_missing"),
+                namespace,
+            )
             exec(  # noqa: S102 - trusted own source
                 _extract_function("_sso_external_bindings_init"),
                 namespace,
