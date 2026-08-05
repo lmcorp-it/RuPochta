@@ -1,7 +1,7 @@
 {
-  "name": "RuPochta Mail",
-  "short_name": "RuPochta Mail",
-  "description": "Рабочая почта RuPochta",
+  "name": "RuПочта",
+  "short_name": "RuПочта",
+  "description": "Рабочая почта RuПочта",
   "start_url": "/?source=pwa",
   "display": "standalone",
   "orientation": "portrait-primary",

@@ -1,9 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 64" width="320" height="64" role="img" aria-label="RuPochta">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" width="420" height="120" role="img" aria-label="RuПочта — Почта. Просто. Быстро.">
   <style>
-    .wm { font: 700 42px/1 "Segoe UI", "Helvetica Neue", Arial, sans-serif; letter-spacing: -0.5px; }
+    .rp-word { font: 700 64px/1 "Segoe UI", "Helvetica Neue", Arial, sans-serif; letter-spacing: -1px; }
+    .rp-tag { font: 400 19px/1 "Segoe UI", "Helvetica Neue", Arial, sans-serif; letter-spacing: 1.5px; }
   </style>
-  <text class="wm" x="0" y="46" fill="#1f66e5">Ru</text>
-  <text class="wm" x="52" y="46" fill="#0b1d45">Pochta</text>
-  <path d="M296 12 L318 24 L296 36 L301 24 Z" fill="#e2172c"/>
-  <path d="M296 12 L301 24 L296 36 L286 24 Z" fill="#1f66e5"/>
+  <!-- app mark: rounded square with an envelope and a paper plane -->
+  <rect x="4" y="14" width="92" height="92" rx="26" fill="#1750d8"/>
+  <rect x="22" y="44" width="52" height="38" rx="6" fill="#fff"/>
+  <path d="M22 48 L48 66 L74 48" fill="none" stroke="#1750d8" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M62 22 L92 32 L70 46 L66 34 Z" fill="#5aa2ff"/>
+  <path d="M66 34 L70 46 L62 22 Z" fill="#ed1b2f"/>
+
+  <text class="rp-word" x="116" y="72" fill="#1750d8">Ru</text>
+  <text class="rp-word" x="188" y="72" fill="#ed1b2f">Почта</text>
+
+  <rect x="116" y="94" width="26" height="3" rx="1.5" fill="#1750d8"/>
+  <text class="rp-tag" x="152" y="100" fill="#4a5568">Почта. Просто. Быстро.</text>
+  <rect x="386" y="94" width="26" height="3" rx="1.5" fill="#ed1b2f"/>
 </svg>

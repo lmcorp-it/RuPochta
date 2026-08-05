@@ -1635,9 +1635,9 @@ function renderMailboxWorkspace(item, detail, timelinePayload, doctorPayload) {
           </div>
         </div>
         <div class="action-row">
-          <button class="ghost-btn" id="workspaceOpenMailCabinetBtn" type="button" aria-label="Открыть RuPochta Mail">
-            <span class="action-label action-label-full" aria-hidden="true">Открыть RuPochta Mail</span>
-            <span class="action-label action-label-short" aria-hidden="true">RuPochta Mail</span>
+          <button class="ghost-btn" id="workspaceOpenMailCabinetBtn" type="button" aria-label="Открыть RuПочта">
+            <span class="action-label action-label-full" aria-hidden="true">Открыть RuПочта</span>
+            <span class="action-label action-label-short" aria-hidden="true">RuПочта</span>
           </button>
           <button class="ghost-btn" id="workspaceResetPasswordBtn" type="button" aria-label="Сбросить пароль" ${resetDisabled ? "disabled" : ""}>
             <span class="action-label action-label-full" aria-hidden="true">Сбросить пароль</span>

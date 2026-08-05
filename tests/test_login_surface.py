@@ -71,7 +71,7 @@ class LoginSurfaceContractTests(unittest.TestCase):
         self.assertIn("Используйте удобный способ входа", self.index)
         self.assertIn("или войдите с помощью почты", self.index)
         self.assertIn("/static/brand/mail-workspace-background.webp", self.style)
-        self.assertIn("© 2026 RuPochta", self.index)
+        self.assertIn("© 2026 RuПочта", self.index)
         self.assertIn('class="login-brand-art"', self.index)
         self.assertIn('/static/brand/mail-login-banner.webp', self.index)
         self.assertNotIn('class="login-brand"', self.index)
@@ -193,7 +193,7 @@ class LoginSurfaceContractTests(unittest.TestCase):
         self.assertIn('const APPEARANCE_STORAGE_KEY = "rupochta-mail-appearance"', self.app)
         self.assertIn('href="https://mail.example.com/"', self.index)
         self.assertIn(
-            '<a class="brand" href="https://mail.example.com/" aria-label="RuPochta Mail — на главную"><img',
+            '<a class="brand" href="https://mail.example.com/" aria-label="RuПочта — на главную"><img',
             self.index,
         )
         self.assertIn('id="account-modal"', self.index)
@@ -266,7 +266,7 @@ class LoginSurfaceContractTests(unittest.TestCase):
         self.assertLess(editor.index('class="compose-template-canvas"'), editor.index('id="compose-body"'))
         self.assertLess(editor.index('id="compose-body"'), editor.index('class="compose-brand-logo"'))
         self.assertLess(editor.index('class="compose-brand-logo"'), editor.index('id="btn-compose-add-attachment"'))
-        self.assertIn('RuPochta Mail · по умолчанию', self.app)
+        self.assertIn('RuПочта · по умолчанию', self.app)
         self.assertIn('С уважением,', self.app)
         self.assertIn('buildBrandedEmailHtml(bodyHtml)', self.app)
         self.assertEqual(self.app.count('appendComposeBody(form'), 4)
@@ -357,7 +357,7 @@ class LoginSurfaceContractTests(unittest.TestCase):
         self.assertIn('id="telegram-auth-bot-link"', self.index)
         self.assertIn('href="https://t.me/RuPochta_bot"', self.index)
         self.assertIn("@RuPochta_bot", self.index)
-        self.assertIn("Официальный бот авторизации RuPochta.", self.index)
+        self.assertIn("Официальный бот авторизации RuПочта.", self.index)
         self.assertNotIn("Открыть Telegram в SSO", self.index)
         self.assertNotIn("function openTelegramSsoAccount()", self.app)
 

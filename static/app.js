@@ -1343,7 +1343,7 @@ const ACCOUNT_PROVIDERS = [
 
 function accountErrorMessage(code) {
   return ({
-    account_session_required: "Войдите через RuPochta ID, чтобы открыть личный кабинет.",
+    account_session_required: "Войдите через RuПочта ID, чтобы открыть личный кабинет.",
     password_current_invalid: "Текущий пароль введён неверно.",
     password_too_short: "Пароль должен содержать минимум 8 символов.",
     current_password_required: "Введите текущий пароль.",
@@ -1429,12 +1429,12 @@ function renderAccount(payload = {}) {
   renderProfileAvatar(
     $("#account-avatar-button"),
     state.ui.accountAvatarDataUrl,
-    profile.displayName || account.username || "RuPochta",
+    profile.displayName || account.username || "RuПочта",
   );
   renderProfileAvatar(
     $("#user-profile-avatar"),
     state.ui.accountAvatarDataUrl,
-    profile.displayName || account.username || "RuPochta",
+    profile.displayName || account.username || "RuПочта",
   );
   $("#account-avatar-remove").classList.toggle("hidden", !state.ui.accountAvatarDataUrl);
   renderAccountProviders(account);
@@ -1520,7 +1520,7 @@ async function saveAccountProfile(event) {
     renderProfileAvatar(
       $("#account-avatar-button"),
       state.ui.accountAvatarDataUrl,
-      profile.displayName || "RuPochta",
+      profile.displayName || "RuПочта",
     );
     $("#account-avatar-remove").classList.toggle("hidden", !state.ui.accountAvatarDataUrl);
     if (state.me) {
@@ -1926,9 +1926,9 @@ function signatureBlock() {
   const sender = (employee && employee.fullName)
     || (state.activeMailbox && state.activeMailbox.display_name)
     || (state.me && (state.me.display_name || state.me.email))
-    || "RuPochta Mail";
+    || "RuПочта";
   const identity = (!isSharedMailboxActive() && state.settings.signature.trim()) || sender;
-  return `\n\nС уважением,\n${identity}\nRuPochta Mail`;
+  return `\n\nС уважением,\n${identity}\nRuПочта`;
 }
 
 function buildReplyBody(message) {
@@ -2977,7 +2977,7 @@ function clearMessageView() {
   view.classList.add("empty");
   view.innerHTML = `
     <div class="reader-empty-state">
-      <div class="reader-empty-kicker">RuPochta Mail</div>
+      <div class="reader-empty-kicker">RuПочта</div>
       <div class="empty-state">Выберите письмо для просмотра</div>
       <div class="muted">Откройте письмо слева или начните новое сообщение.</div>
     </div>
@@ -3600,7 +3600,7 @@ async function handleGlobalShortcuts(event) {
 function renderComposeTemplateOptions() {
   const select = $("#compose-template-select");
   if (!select) return;
-  select.innerHTML = `<option value="${BRAND_TEMPLATE.id}">RuPochta Mail · по умолчанию</option>`;
+  select.innerHTML = `<option value="${BRAND_TEMPLATE.id}">RuПочта · по умолчанию</option>`;
   state.settings.templates.forEach((template) => {
     const opt = document.createElement("option");
     opt.value = String(template.id);
@@ -4040,7 +4040,7 @@ function buildGeneratedInviteFile() {
   const uid = `${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
   const lines = [
     "BEGIN:VCALENDAR",
-    "PRODID:-//RuPochta//RuPochta Mail//RU",
+    "PRODID:-//RuPochta//RuПочта//RU",
     "VERSION:2.0",
     "CALSCALE:GREGORIAN",
     "METHOD:REQUEST",
@@ -5242,7 +5242,7 @@ function bindEvents() {
       renderProfileAvatar(
         $("#account-avatar-button"),
         state.ui.accountAvatarDataUrl,
-        state.ui.accountProfile?.displayName || "RuPochta",
+        state.ui.accountProfile?.displayName || "RuПочта",
       );
       $("#account-avatar-remove").classList.remove("hidden");
       setAccountStatus($("#account-profile-status"), "Фото готово к сохранению.");
@@ -5257,7 +5257,7 @@ function bindEvents() {
     renderProfileAvatar(
       $("#account-avatar-button"),
       "",
-      state.ui.accountProfile?.displayName || "RuPochta",
+      state.ui.accountProfile?.displayName || "RuПочта",
     );
     $("#account-avatar-remove").classList.add("hidden");
     setAccountStatus($("#account-profile-status"), "Фото будет удалено после сохранения.");
