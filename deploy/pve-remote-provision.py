@@ -13,6 +13,14 @@ Standard library only, so it runs on the hypervisor, on a laptop, or from CI.
         --host pve.example.com --user claude@lm.local \
         --vm mail --new-name rupochta-rf
 
+`--user` also accepts an API token id, which is what to use in CI:
+
+    export PVE_PASSWORD='<token secret>'
+    ./deploy/pve-remote-provision.py --user 'claude@lm.local!deploy' ...
+
+A token can be scoped to this job and revoked on its own, so no account
+password has to live in a secret store.
+
 Nothing is changed without --apply: the default run reports what it found and
 what it would do. Mailbox deletion is separate again and needs
 --purge-mailboxes on top of --apply, because it destroys mail.
@@ -50,6 +58,7 @@ class Proxmox:
         self.base = f"https://{host if ':' in host else host + ':8006'}/api2/json"
         self.ticket: Optional[str] = None
         self.csrf: Optional[str] = None
+        self.token_header: Optional[str] = None
         if verify_tls:
             self.ssl_context = ssl.create_default_context()
         else:
@@ -68,10 +77,13 @@ class Proxmox:
         body = urllib.parse.urlencode(data, doseq=True).encode() if data else None
         request = urllib.request.Request(url, data=body, method=method)
         request.add_header("Accept", "application/json")
-        if self.ticket:
+        if self.token_header:
+            # API tokens authenticate per request and need no CSRF token.
+            request.add_header("Authorization", self.token_header)
+        elif self.ticket:
             request.add_header("Cookie", f"PVEAuthCookie={self.ticket}")
-        if self.csrf and method != "GET":
-            request.add_header("CSRFPreventionToken", self.csrf)
+            if self.csrf and method != "GET":
+                request.add_header("CSRFPreventionToken", self.csrf)
         try:
             with urllib.request.urlopen(request, timeout=timeout, context=self.ssl_context) as response:
                 payload = json.loads(response.read().decode("utf-8") or "{}")
@@ -86,6 +98,25 @@ class Proxmox:
         return payload.get("data")
 
     def login(self, username: str, password: str) -> None:
+        """Authenticate with an API token when one is given, otherwise a ticket.
+
+        A token id carries a '!' — user@realm!tokenid — and the secret is the
+        token's UUID. Prefer it: the token can be scoped to just this job and
+        revoked on its own, instead of putting an account password in CI.
+        """
+        if "!" in username:
+            self.token_header = f"PVEAPIToken={username}={password}"
+            try:
+                self._request("GET", "/version")
+            except ProxmoxError as exc:
+                self.token_header = None
+                raise ProxmoxError(
+                    f"API token rejected: {exc}. Check the token id (user@realm!tokenid), "
+                    "its secret, and that the token has the permissions this job needs "
+                    "(VM.Config, VM.Monitor, VM.GuestAgent.* on the guest)."
+                ) from exc
+            return
+
         data = self._request(
             "POST", "/access/ticket", {"username": username, "password": password}
         )
@@ -178,7 +209,15 @@ def shell(api: Proxmox, node: str, vmid: int, script: str, label: str, apply: bo
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--host", required=True, help="Proxmox host, e.g. pve.example.com or pve.example.com:8006")
-    parser.add_argument("--user", required=True, help="Proxmox login, e.g. root@pam or claude@lm.local")
+    parser.add_argument(
+        "--user",
+        required=True,
+        help=(
+            "Proxmox login (root@pam, claude@lm.local) with the account password in "
+            "PVE_PASSWORD, or an API token id (claude@lm.local!deploy) with the token "
+            "secret in PVE_PASSWORD — the token is preferred"
+        ),
+    )
     parser.add_argument("--vm", required=True, help="Guest vmid, exact name, or unique name fragment")
     parser.add_argument("--new-name", default="rupochta-rf", help="New guest name (default: rupochta-rf)")
     parser.add_argument("--repo", default=DEFAULT_REPO, help="Repository to deploy from")

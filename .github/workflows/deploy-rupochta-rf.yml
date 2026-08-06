@@ -5,7 +5,9 @@ name: deploy рупочта.рф
 # checks the result. Manual trigger only — this touches a live mail server.
 #
 # Needs one repository secret:
-#   PVE_PASSWORD — password for the Proxmox login given in `pve_user`
+#   PVE_PASSWORD — the secret for the login given in `pve_user`: an account
+#                  password, or (preferred) the secret of a scoped Proxmox API
+#                  token, in which case `pve_user` is the token id.
 #
 # Put the workflow behind an environment with required reviewers if you want a
 # second pair of eyes before anything is applied.
@@ -18,7 +20,7 @@ on:
         required: true
         default: "pve.lets-mobile.ru"
       pve_user:
-        description: "Proxmox login, e.g. claude@lm.local or root@pam"
+        description: "Proxmox login (claude@lm.local) or API token id (claude@lm.local!deploy)"
         required: true
         default: "claude@lm.local"
       vm:
