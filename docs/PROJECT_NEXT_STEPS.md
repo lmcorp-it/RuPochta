@@ -2,7 +2,7 @@
 
 **Baseline:** `main @ b8782d99819540c2ed840a96cbea5d9797b9ceae`  
 **Decision:** security stabilization before feature expansion.  
-**Sequence:** Secure → Verify → Standardize → Decompose → Expand.
+**Sequence:** Guide → Secure → Verify → Standardize → Decompose → Expand.
 
 ## Release blockers
 
@@ -51,11 +51,11 @@
 
 ## AI / Codex readiness
 
-- Commit `AGENTS.md` with repository map, commands, security invariants and PR rules.
-- Add `.github/copilot-instructions.md` that points to `AGENTS.md`.
-- Add `docs/architecture.md` and a root `Makefile` or `justfile`.
-- Add a sanitized `.vscode/mcp.json.example` with read-only defaults and placeholders only.
-- Add focused security-review and release-check agents/skills only after ownership is assigned.
+- [x] Add `AGENTS.md` with repository map, commands, security invariants and PR rules in the documentation-guidance PR.
+- [x] Add `.github/copilot-instructions.md` that points to `AGENTS.md` in the documentation-guidance PR.
+- [ ] Add `docs/architecture.md` and a root `Makefile` or `justfile`.
+- [ ] Add a sanitized `.vscode/mcp.json.example` with read-only defaults and placeholders only.
+- [ ] Add focused security-review and release-check agents/skills after ownership is assigned.
 
 ## Product roadmap after the gates
 
@@ -68,6 +68,7 @@
 
 ## Required PR order
 
+0. `docs/project-execution-guidance` — establish the operating rules and release checklist without changing runtime behavior.
 1. `security/ldaps-certificate-validation`
 2. `security/custom-endpoint-safe-dialer`
 3. `security/terminal-secret-cleanup`
@@ -77,8 +78,7 @@
 7. `frontend/mail-preview-hardening`
 8. `ci/reproducible-python`
 9. `test/asgi-security-harness`
-10. `docs/agent-guidance`
-11. `refactor/app-factory-and-services`
+10. `refactor/app-factory-and-services`
 
 ## Release gate
 
