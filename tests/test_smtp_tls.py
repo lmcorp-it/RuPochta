@@ -24,7 +24,9 @@ class SmtpTlsVerificationTests(unittest.TestCase):
 
     def test_external_imap_hosts_are_always_verified(self):
         connect = SERVER.split("def _imap_connect(", 1)[1].split("\ndef ", 1)[0]
-        self.assertIn("if not (host or port):", connect)
+        self.assertIn("not (host or port)", connect)
+        self.assertIn("IMAP_VERIFY_TLS", connect)
+        self.assertIn("_host_resolves_to_loopback_only", connect)
 
 
 if __name__ == "__main__":

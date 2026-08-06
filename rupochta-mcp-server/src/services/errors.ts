@@ -55,6 +55,20 @@ export class RuPochtaAuthRequiredError extends Error {
   }
 }
 
+/** The server is running in read-only mode and refused a mutating call. */
+export class RuPochtaReadOnlyError extends Error {
+  constructor(method: string, endpoint: string) {
+    super(
+      `this MCP server is running in read-only mode and refused ${method} ${endpoint}. ` +
+        "Set RUPOCHTA_READ_ONLY=0 in the server environment to enable write tools " +
+        "(send/delete/move/filter/settings changes). Only do this if you trust the " +
+        "content this agent will read, since a malicious message could otherwise try " +
+        "to trick it into taking write actions.",
+    );
+    this.name = "RuPochtaReadOnlyError";
+  }
+}
+
 const STATUS_GUIDANCE: Record<number, string> = {
   400: "The request was rejected as malformed. Check folder names, UIDs and date formats, then retry.",
   401: "The RuPochta session is missing or expired. Call rupochta_login with a mailbox address and password, or set RUPOCHTA_EMAIL and RUPOCHTA_PASSWORD in the server environment.",
@@ -94,6 +108,9 @@ export function describeError(error: unknown): string {
     );
   }
   if (error instanceof RuPochtaAuthRequiredError) {
+    return `Error: ${error.message}`;
+  }
+  if (error instanceof RuPochtaReadOnlyError) {
     return `Error: ${error.message}`;
   }
   if (error instanceof Error) {

@@ -15,6 +15,7 @@ import { SESSION_COOKIE_NAME } from "../constants.js";
 import {
   RuPochtaApiError,
   RuPochtaAuthRequiredError,
+  RuPochtaReadOnlyError,
   RuPochtaTransportError,
 } from "./errors.js";
 
@@ -281,6 +282,16 @@ export class RuPochtaClient {
 
   private async dispatch(endpoint: string, options: RequestOptions): Promise<Response> {
     const method = options.method ?? "GET";
+    // SEC-006/SEC-007: in read-only mode (the default), refuse every
+    // mutating call except the auth endpoints themselves, which manage this
+    // server's own session and are not a mailbox write.
+    if (
+      this.config.readOnly &&
+      MUTATING_METHODS.has(method) &&
+      !endpoint.startsWith("/api/auth/")
+    ) {
+      throw new RuPochtaReadOnlyError(method, endpoint);
+    }
     const url = `${this.config.baseUrl}${endpoint}${buildQuery(options.query)}`;
     const headers: Record<string, string> = { Accept: "application/json" };
 

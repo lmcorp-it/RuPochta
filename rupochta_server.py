@@ -27,6 +27,7 @@ import imaplib
 import ipaddress
 import json
 import logging
+import nh3
 import os
 import re
 import smtplib
@@ -156,6 +157,14 @@ class Config:
     SMTP_HOST = os.environ.get("MAIL_SMTP_HOST", os.environ.get("SMTP_HOST", MAIL_HOST))
     SMTP_PORT = int(os.environ.get("MAIL_SMTP_PORT", os.environ.get("SMTP_PORT", "587")))
     SMTP_VERIFY_TLS = os.environ.get("MAIL_SMTP_VERIFY_TLS", "1").strip().lower() not in {
+        "0", "false", "no", "off"
+    }
+    # SEC-001: certificate/hostname verification is on by default for the
+    # managed IMAP endpoint too. Disabling it (MAIL_IMAP_VERIFY_TLS=0) is a
+    # fail-closed, local-dev-only escape hatch — _imap_connect additionally
+    # requires the resolved endpoint to actually be loopback before it will
+    # honor this flag, so a DNS name pointing at a real host can't abuse it.
+    IMAP_VERIFY_TLS = os.environ.get("MAIL_IMAP_VERIFY_TLS", "1").strip().lower() not in {
         "0", "false", "no", "off"
     }
     MAIL_DOMAIN = os.environ.get("MAIL_DOMAIN", "example.com")
@@ -333,6 +342,118 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 log = logging.getLogger("rupochta")
+
+
+def _host_resolves_to_loopback_only(host: str) -> bool:
+    """SEC-001: true only if every address `host` resolves to is loopback.
+
+    A DNS name is not trustworthy for the insecure-local escape hatch: it can
+    resolve to a public or private address just as easily as 127.0.0.1. We
+    resolve all A/AAAA answers and require every one of them to be loopback.
+    """
+    text = str(host or "").strip()
+    if not text:
+        return False
+    try:
+        addr = ipaddress.ip_address(text)
+        return addr.is_loopback
+    except ValueError:
+        pass
+    try:
+        infos = socket.getaddrinfo(text, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        sockaddr = info[4]
+        ip_text = sockaddr[0] if sockaddr else ""
+        try:
+            if not ipaddress.ip_address(ip_text).is_loopback:
+                return False
+        except ValueError:
+            return False
+    return True
+
+
+# SEC-003: egress policy for user-supplied ("custom"/BYOM) IMAP and SMTP
+# endpoints. Only these ports are reachable without an admin-configured
+# allowlist entry — anything else (22, 80, 2375, 5432, 6379, ...) is refused
+# before a connection is ever attempted.
+_CUSTOM_ENDPOINT_ALLOWED_PORTS = {993, 465, 587}
+
+
+def _custom_endpoint_admin_allowlist() -> List[str]:
+    raw = os.environ.get("MAIL_CUSTOM_ENDPOINT_ALLOWLIST", "")
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _host_is_admin_allowlisted(host: str) -> bool:
+    host_l = str(host or "").strip().lower()
+    if not host_l:
+        return False
+    for entry in _custom_endpoint_admin_allowlist():
+        entry_l = entry.strip().lower()
+        if not entry_l:
+            continue
+        if entry_l == host_l:
+            return True
+        try:
+            network = ipaddress.ip_network(entry_l, strict=False)
+            addr = ipaddress.ip_address(host_l)
+            if addr in network:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _reject_ssrf_targets(host: str, port: int) -> None:
+    """Raise ValueError if a custom mailbox endpoint is an SSRF target.
+
+    Applies to user-supplied (provider="custom") IMAP/SMTP hosts only — known
+    provider presets are fixed, vetted endpoints and never go through here.
+    """
+    host_text = str(host or "").strip()
+    if not host_text:
+        raise ValueError("custom endpoint host is required")
+    port_value = int(port or 0)
+    admin_allowlisted_host = _host_is_admin_allowlisted(host_text)
+    if port_value not in _CUSTOM_ENDPOINT_ALLOWED_PORTS and not admin_allowlisted_host:
+        raise ValueError(f"port {port_value} is not permitted for custom mailbox endpoints")
+    if admin_allowlisted_host:
+        # An administrator explicitly vetted this host/CIDR for a private
+        # corporate endpoint — skip the public-network requirement below.
+        return
+    try:
+        infos = socket.getaddrinfo(host_text, port_value or None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        raise ValueError(f"could not resolve custom endpoint host: {host_text}") from exc
+    if not infos:
+        raise ValueError(f"could not resolve custom endpoint host: {host_text}")
+    for info in infos:
+        sockaddr = info[4]
+        ip_text = sockaddr[0] if sockaddr else ""
+        try:
+            addr = ipaddress.ip_address(ip_text)
+        except ValueError:
+            raise ValueError(f"custom endpoint host resolved to an invalid address: {ip_text}")
+        if (
+            addr.is_loopback
+            or addr.is_private
+            or addr.is_link_local
+            or addr.is_multicast
+            or addr.is_reserved
+            or addr.is_unspecified
+        ):
+            raise ValueError(
+                "custom mailbox endpoint resolves to a private/loopback/reserved address"
+            )
+        # Cloud metadata endpoint (169.254.169.254 is already link-local and
+        # caught above; this also covers the IPv6 metadata alias some clouds
+        # use).
+        if ip_text in {"fd00:ec2::254"}:
+            raise ValueError("custom mailbox endpoint resolves to a metadata address")
 
 
 def _local_mailserver_enabled() -> bool:
@@ -699,6 +820,14 @@ def db_init() -> None:
                 "ALTER TABLE scheduled_sends "
                 "ADD COLUMN origin TEXT NOT NULL DEFAULT 'scheduled'"
             )
+        # SEC-005: stored IMAP/SMTP credentials must not outlive the send
+        # attempt they were queued for. Purge any leftover encrypted
+        # passwords on rows that are already in a terminal state (sent or
+        # cancelled) from before this migration existed.
+        con.execute(
+            "UPDATE scheduled_sends SET imap_pass_enc='' "
+            "WHERE status IN ('sent','cancelled') AND imap_pass_enc != ''"
+        )
         # Snooze queue
         con.execute(
             """
@@ -2102,14 +2231,15 @@ def session_cleanup_loop() -> None:
 # ---------------------------------------------------------------------------
 # We need to store the IMAP password briefly to let a background worker
 # perform SMTP/IMAP operations on the user's behalf (Send Later, Snooze).
-# Uses a derived key from SECRET_KEY env + a per-record salt. AES would be
-# nicer but we want zero extra deps — use Fernet from `cryptography` if
-# installed, else fall back to XOR+HMAC (still far better than plaintext).
+# SEC-008: this MUST fail closed. There is no XOR/HMAC fallback cipher and
+# no fallback to reusing RUPOCHTA_INTERNAL_TOKEN as the encryption key —
+# `cryptography` is a hard dependency (see requirements.txt) and the
+# encryption key is a dedicated secret (WEBMAIL_SECRET_KEY) that must never
+# be shared with the internal-service auth token. If either is missing,
+# encrypt_secret()/decrypt_secret() raise instead of silently degrading to
+# a weaker or absent cipher.
 
-_SECRET_KEY = os.environ.get(
-    "WEBMAIL_SECRET_KEY",
-    os.environ.get("RUPOCHTA_INTERNAL_TOKEN", ""),
-).encode("utf-8")
+_SECRET_KEY = os.environ.get("WEBMAIL_SECRET_KEY", "").strip().encode("utf-8")
 _PREVIOUS_SECRET_KEYS = tuple(
     value.strip().encode("utf-8")
     for value in os.environ.get("WEBMAIL_SECRET_KEY_PREVIOUS", "").split(",")
@@ -2122,11 +2252,22 @@ try:
 except Exception:
     _Fernet = None  # type: ignore
     _FERNET_AVAILABLE = False
-    log.warning("cryptography.Fernet not available — using fallback XOR encryption")
+    log.critical(
+        "cryptography.Fernet not available — stored-secret encryption is "
+        "disabled (no insecure fallback cipher will be used)."
+    )
+
+if not _SECRET_KEY:
+    log.critical(
+        "WEBMAIL_SECRET_KEY is not set — stored-secret encryption is "
+        "disabled. Set WEBMAIL_SECRET_KEY to a dedicated random secret "
+        "(do not reuse RUPOCHTA_INTERNAL_TOKEN) to enable Send Later / "
+        "Snooze / shared-mailbox credential storage."
+    )
 
 
 def _fernet_for_key(key: bytes):
-    if not _FERNET_AVAILABLE or _Fernet is None:
+    if not _FERNET_AVAILABLE or _Fernet is None or not key:
         return None
     import base64 as _b64f
     import hashlib as _hf
@@ -2142,22 +2283,13 @@ def _encrypt_secret_with_key(
     if not plaintext:
         return ""
     fernet = _fernet_for_key(key) if prefer_fernet else None
-    if fernet is not None:
-        return fernet.encrypt(plaintext.encode("utf-8")).decode("ascii")
-    # Fallback: XOR with SHA256-derived keystream + HMAC tag
-    import base64 as _b64f
-    import hashlib as _hf
-    import hmac as _hm
-    data = plaintext.encode("utf-8")
-    # Generate keystream by hashing KEY + counter
-    ks = b""
-    counter = 0
-    while len(ks) < len(data):
-        ks += _hf.sha256(key + counter.to_bytes(4, "big")).digest()
-        counter += 1
-    cipher = bytes(a ^ b for a, b in zip(data, ks[:len(data)]))
-    tag = _hm.new(key, cipher, _hf.sha256).digest()[:16]
-    return "xor$" + _b64f.urlsafe_b64encode(cipher + tag).decode("ascii")
+    if fernet is None:
+        raise RuntimeError(
+            "Cannot encrypt secret: cryptography.Fernet unavailable or "
+            "WEBMAIL_SECRET_KEY is not configured. Refusing to store "
+            "credentials in plaintext or with a weaker fallback cipher."
+        )
+    return fernet.encrypt(plaintext.encode("utf-8")).decode("ascii")
 
 
 def _decrypt_secret_with_keys(
@@ -2167,31 +2299,14 @@ def _decrypt_secret_with_keys(
     if not ciphertext:
         return None, None
     if ciphertext.startswith("xor$"):
-        import base64 as _b64f
-        import hashlib as _hf
-        import hmac as _hm
-        try:
-            raw = _b64f.urlsafe_b64decode(ciphertext[4:].encode("ascii"))
-            if len(raw) < 16:
-                return None, None
-            cipher, tag = raw[:-16], raw[-16:]
-            for index, key in enumerate(keys):
-                want_tag = _hm.new(key, cipher, _hf.sha256).digest()[:16]
-                if not _hm.compare_digest(want_tag, tag):
-                    continue
-                ks = b""
-                counter = 0
-                while len(ks) < len(cipher):
-                    ks += _hf.sha256(
-                        key + counter.to_bytes(4, "big")
-                    ).digest()
-                    counter += 1
-                plaintext = bytes(
-                    a ^ b for a, b in zip(cipher, ks[:len(cipher)])
-                ).decode("utf-8")
-                return plaintext, index
-        except Exception:
-            return None, None
+        # Legacy ciphertext from a previous version's XOR+HMAC fallback.
+        # That fallback has been removed (SEC-008); such rows can no longer
+        # be decrypted and must be treated as unrecoverable/expired.
+        log.warning(
+            "Encountered legacy xor$-prefixed ciphertext; the insecure "
+            "XOR fallback cipher has been removed and this value cannot "
+            "be decrypted."
+        )
         return None, None
     if _FERNET_AVAILABLE:
         for index, key in enumerate(keys):
@@ -2206,6 +2321,7 @@ def _decrypt_secret_with_keys(
             except Exception:
                 continue
     return None, None
+
 
 
 _SQLITE_SECRET_COLUMNS = (
@@ -2503,6 +2619,7 @@ def _resolve_provider_hosts(
         port = int(request_imap_port) if request_imap_port else None
         if not host or not port:
             raise ValueError("custom provider requires imap_host and imap_port")
+        _reject_ssrf_targets(host, port)
         return host, port
     return str(preset["imap_host"]), int(preset["imap_port"])
 
@@ -2529,6 +2646,8 @@ def _resolve_provider_smtp(
         port = int(request_smtp_port) if request_smtp_port else None
         if host and not port:
             raise ValueError("custom smtp_host requires smtp_port")
+        if host and port:
+            _reject_ssrf_targets(host, port)
         return (host, port) if host else (None, None)
     return str(preset["smtp_host"]), int(preset["smtp_port"])
 
@@ -2805,7 +2924,16 @@ def _imap_connect(
     imap_host = str(host or "").strip() or CFG.IMAP_HOST
     imap_port = int(port) if port else CFG.IMAP_PORT
     ctx = ssl.create_default_context()
-    if not (host or port):
+    # SEC-001: certificate/hostname verification stays on by default for every
+    # endpoint, managed or BYOM. The only opt-out is an explicit local-dev
+    # flag (MAIL_IMAP_VERIFY_TLS=0), and even then only when the endpoint
+    # actually resolves to loopback — a DNS name resolving to a real host must
+    # never bypass verification.
+    if (
+        not (host or port)
+        and not getattr(CFG, "IMAP_VERIFY_TLS", True)
+        and _host_resolves_to_loopback_only(imap_host)
+    ):
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
     direct_error: Optional[Exception] = None
@@ -3455,18 +3583,59 @@ def imap_search_messages(
         return {"messages": messages, "total": total, "query": query, "limit": limit}
 
 
-_SCRIPT_RE = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
-_EVENT_RE = re.compile(r"\son\w+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]*)", re.IGNORECASE)
-_JS_HREF_RE = re.compile(r"(href|src)\s*=\s*([\"'])\s*javascript:[^\"']*\2", re.IGNORECASE)
+_SANITIZE_ALLOWED_TAGS = {
+    "a", "b", "strong", "i", "em", "u", "s", "strike", "p", "br", "div", "span",
+    "ul", "ol", "li", "blockquote", "pre", "code",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+    "table", "thead", "tbody", "tfoot", "tr", "td", "th",
+    "img", "hr", "sub", "sup", "small", "font",
+}
+_SANITIZE_ALLOWED_ATTRIBUTES = {
+    "a": {"href", "title"},
+    "img": {"src", "alt", "width", "height"},
+    "td": {"colspan", "rowspan", "align", "valign"},
+    "th": {"colspan", "rowspan", "align", "valign"},
+    "table": {"cellpadding", "cellspacing", "border"},
+    "font": {"color", "size", "face"},
+}
+# Only https, mailto and our own cid: (inline attachment) references are
+# ever allowed as a URL — javascript:, data:, file: and any other scheme are
+# stripped by nh3 before we see the result.
+_SANITIZE_URL_SCHEMES = {"https", "mailto", "cid"}
+# These tags — and everything nested inside them — are removed entirely
+# rather than unwrapped, so `<script>...</script>`, `<style>...</style>` and
+# an `<iframe srcdoc="...">` payload can never leak their inner text either.
+_SANITIZE_CLEAN_CONTENT_TAGS = {
+    "script", "style", "iframe", "object", "embed", "form", "svg", "math",
+    "noscript", "base", "meta", "template",
+}
+_REMOTE_IMG_SRC_RE = re.compile(r'(<img\b[^>]*?)\ssrc="(https?://[^"]*)"', re.IGNORECASE)
 
 
 def sanitize_html(content: str) -> str:
+    """Sanitize incoming HTML mail with a real parser-based allowlist.
+
+    Replaces the old regex-only filter (SEC-002): a regex cannot model an
+    HTML5 parser, so it missed iframe/srcdoc, object/embed, SVG, malformed
+    tags and encoded-entity bypasses. nh3 parses the document like a browser
+    would and only re-serializes the allow-listed tags/attributes/schemes.
+
+    Remote (http/https) images are blocked by default — the src is preserved
+    as data-blocked-src so the client can offer an explicit "load images"
+    action, closing the tracking-pixel / same-origin-probe vector.
+    """
     if not content:
         return ""
-    content = _SCRIPT_RE.sub("", content)
-    content = _EVENT_RE.sub("", content)
-    content = _JS_HREF_RE.sub(r'\1=\2#\2', content)
-    return content
+    cleaned = nh3.clean(
+        content,
+        tags=_SANITIZE_ALLOWED_TAGS,
+        attributes=_SANITIZE_ALLOWED_ATTRIBUTES,
+        url_schemes=_SANITIZE_URL_SCHEMES,
+        link_rel="noopener noreferrer nofollow",
+        clean_content_tags=_SANITIZE_CLEAN_CONTENT_TAGS,
+    )
+    cleaned = _REMOTE_IMG_SRC_RE.sub(r'\1 data-blocked-src="\2"', cleaned)
+    return cleaned
 
 
 def _ical_unescape(value: str) -> str:
@@ -4241,10 +4410,9 @@ def _deliver_scheduled_send_row(
     with _db_connection() as con:
         con.execute(
             "UPDATE scheduled_sends SET status='sent', sent_at=?, "
-            "imap_pass_enc=?, last_error=NULL WHERE id=?",
+            "imap_pass_enc='', last_error=NULL WHERE id=?",
             (
                 now_iso,
-                encrypt_secret(imap_pass) or "",
                 row_id,
             ),
         )
@@ -6662,10 +6830,20 @@ def _worker_process_scheduled_sends() -> int:
                 ).fetchone()
                 attempts = int(current[0]) if current else 0
                 status = "failed" if attempts >= 3 else "pending"
-                con.execute(
-                    "UPDATE scheduled_sends SET status=?, last_error=? WHERE id=?",
-                    (status, str(e)[:500], row_id),
-                )
+                if status == "failed":
+                    # SEC-005: no more automatic retries will use the stored
+                    # credential — a user-initiated retry re-supplies the
+                    # password from their live session, so drop it now.
+                    con.execute(
+                        "UPDATE scheduled_sends SET status=?, last_error=?, "
+                        "imap_pass_enc='' WHERE id=?",
+                        (status, str(e)[:500], row_id),
+                    )
+                else:
+                    con.execute(
+                        "UPDATE scheduled_sends SET status=?, last_error=? WHERE id=?",
+                        (status, str(e)[:500], row_id),
+                    )
                 con.commit()
             continue
         log.info("scheduled send id=%s sent to %s", row_id, row["to_list"][:200])
