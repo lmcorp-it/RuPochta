@@ -1,6 +1,6 @@
 # RuPochta Project Next Steps
 
-**Baseline:** `main @ b8782d99819540c2ed840a96cbea5d9797b9ceae`  
+**Baseline:** `main @ bf097e23302665c412667f112cc3739485b2c7dd`  
 **Decision:** security stabilization before feature expansion.  
 **Sequence:** Guide → Secure → Verify → Standardize → Decompose → Expand.
 
