@@ -46,6 +46,9 @@ before(async () => {
     RUPOCHTA_BASE_URL: mock.baseUrl,
     RUPOCHTA_EMAIL: mock.credentials.email,
     RUPOCHTA_PASSWORD: mock.credentials.password,
+    // The e2e suite below exercises real write tools (send/schedule/flags),
+    // so it must opt out of the SEC-006 read-only default explicitly.
+    RUPOCHTA_READ_ONLY: "0",
   });
 });
 
@@ -357,6 +360,36 @@ describe("writes", () => {
     });
     assert.equal(result.isError, true);
     assert.match(textOf(result), /Pass seen and\/or flagged/);
+  });
+});
+
+describe("read-only mode (SEC-006/SEC-007)", () => {
+  it("blocks write tools by default and still allows reads", async () => {
+    const readOnly = await connect({
+      RUPOCHTA_BASE_URL: mock.baseUrl,
+      RUPOCHTA_EMAIL: mock.credentials.email,
+      RUPOCHTA_PASSWORD: mock.credentials.password,
+      // RUPOCHTA_READ_ONLY intentionally unset: must default to read-only.
+    });
+    try {
+      const before = mock.requests.length;
+      const sendBefore = mock.requests.filter((entry) => entry.path === "/api/messages/send").length;
+      const send = await readOnly.callTool({
+        name: "rupochta_send_message",
+        arguments: { to: "alice@example.local", subject: "Hi", body: "text" },
+      });
+      assert.equal(send.isError, true);
+      assert.match(textOf(send), /read-only mode/);
+      assert.match(textOf(send), /RUPOCHTA_READ_ONLY=0/);
+      const sendAfter = mock.requests.filter((entry) => entry.path === "/api/messages/send").length;
+      assert.equal(sendAfter, sendBefore, "read-only mode must never reach a mutating endpoint");
+
+      const list = await readOnly.callTool({ name: "rupochta_list_folders", arguments: {} });
+      assert.equal(list.isError, undefined, "reads must still work in read-only mode");
+      assert.ok(mock.requests.length > before);
+    } finally {
+      await readOnly.close();
+    }
   });
 });
 
