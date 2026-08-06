@@ -67,6 +67,10 @@ def _load_endpoint_helpers(db_path: str):
         "Tuple": Tuple,
         "Any": Any,
         "MAIL_PROVIDER_PRESETS": _load_presets(),
+        # SEC-003 egress policy is exercised in test_custom_endpoint_egress.py
+        # against the real implementation. These helpers resolve provider
+        # presets, so the guard is stubbed out to keep them off the network.
+        "_reject_ssrf_targets": lambda host, port: None,
     }
     for name in (
         "_resolve_provider_smtp",
