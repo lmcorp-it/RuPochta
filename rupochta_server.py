@@ -61,6 +61,7 @@ from pydantic import BaseModel, Field
 try:
     from ldap3 import Server, Connection, ALL, SUBTREE, NTLM, SIMPLE
     from ldap3.core.exceptions import LDAPException
+    from ldap3.utils.conv import escape_filter_chars as ldap3_escape_filter_chars
     LDAP_AVAILABLE = True
 except Exception:  # pragma: no cover
     LDAP_AVAILABLE = False
@@ -5186,7 +5187,7 @@ def ldap_get_user_photo(login: str) -> Optional[bytes]:
 def ldap_get_user_displayname(login: str) -> str:
     if not _ldap_bind_available():
         return login
-    safe = re.sub(r"[()\\*\x00]", "", login)
+    safe = ldap3_escape_filter_chars(login)
     flt = f"(&(objectClass=user)(sAMAccountName={safe}))"
     for srv_url in CFG.LDAP_SERVERS:
         try:
@@ -11643,6 +11644,7 @@ def _managesieve_put_script(user: str, password: str, script: str) -> Tuple[bool
         ctx = _ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = _ssl.CERT_NONE
+        ctx.minimum_version = _ssl.TLSVersion.TLSv1_2
 
         def _recv_until(buf_state: Dict[str, bytes]) -> List[str]:
             """Read response lines until we see OK/NO/BYE."""
