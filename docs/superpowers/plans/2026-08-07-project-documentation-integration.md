@@ -90,15 +90,15 @@ git diff --name-only main...HEAD
 
 Expected: only the five paths listed above.
 
-- [ ] **Step 2: Confirm Markdown has no unresolved placeholders**
+- [ ] **Step 2: Confirm authoritative guidance has no unresolved placeholders**
 
 Run:
 
 ```bash
-git grep -nE '\b(TBD|TODO|FIXME)\b' -- AGENTS.md .github/copilot-instructions.md docs/PROJECT_NEXT_STEPS.md docs/SECURITY_AND_RELEASE_CHECKLIST.md docs/superpowers/plans/2026-08-07-project-documentation-integration.md
+git grep -nE '\b(TBD|TODO|FIXME)\b' -- AGENTS.md .github/copilot-instructions.md docs/PROJECT_NEXT_STEPS.md docs/SECURITY_AND_RELEASE_CHECKLIST.md
 ```
 
-Expected: no matches.
+Expected: no matches. Review this implementation-plan file manually because it contains the literal placeholder-pattern expression used by the command.
 
 - [ ] **Step 3: Review the complete diff and open a pull request**
 
