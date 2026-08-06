@@ -119,7 +119,7 @@ def _load_binding_helpers(db_path: str, key: bytes):
     return types.SimpleNamespace(**namespace)
 
 
-def _load_imap_connect():
+def _load_imap_connect(imap_host="managed.test", imap_verify_tls=True):
     contexts = []
 
     class FakeContext:
@@ -144,9 +144,13 @@ def _load_imap_connect():
         "contextmanager": contextmanager,
         "imaplib": types.SimpleNamespace(IMAP4_SSL=FakeConnection),
         "ssl": fake_ssl,
-        "CFG": types.SimpleNamespace(IMAP_HOST="managed.test", IMAP_PORT=993),
+        "CFG": types.SimpleNamespace(
+            IMAP_HOST=imap_host, IMAP_PORT=993, IMAP_VERIFY_TLS=imap_verify_tls
+        ),
         "_local_mailserver_enabled": lambda: False,
         "_mailbox_imap_endpoint": lambda _user: (None, None),
+        "_host_resolves_to_loopback_only": lambda host: host
+        in {"127.0.0.1", "localhost", "::1"},
     }
     exec(_extract_function("_imap_connect"), namespace)  # noqa: S102 - trusted own source
     return namespace["_imap_connect"], contexts, fake_ssl
@@ -277,6 +281,25 @@ class SsoMailboxBindingTest(unittest.TestCase):
         self.assertTrue(contexts[-1].check_hostname)
         self.assertEqual(contexts[-1].verify_mode, fake_ssl.CERT_REQUIRED)
 
+        # SEC-001: the managed/default endpoint is verified by default too.
+        connect("person@example.com", "managed-password")
+        self.assertTrue(contexts[-1].check_hostname)
+        self.assertEqual(contexts[-1].verify_mode, fake_ssl.CERT_REQUIRED)
+
+    def test_imap_verify_tls_opt_out_requires_loopback_managed_host(self):
+        # A non-loopback managed host must never bypass verification, even
+        # with MAIL_IMAP_VERIFY_TLS=0 set.
+        connect, contexts, fake_ssl = _load_imap_connect(
+            imap_host="managed.test", imap_verify_tls=False
+        )
+        connect("person@example.com", "managed-password")
+        self.assertTrue(contexts[-1].check_hostname)
+        self.assertEqual(contexts[-1].verify_mode, fake_ssl.CERT_REQUIRED)
+
+        # Only an actual loopback managed host may use the local-dev opt-out.
+        connect, contexts, fake_ssl = _load_imap_connect(
+            imap_host="127.0.0.1", imap_verify_tls=False
+        )
         connect("person@example.com", "managed-password")
         self.assertFalse(contexts[-1].check_hostname)
         self.assertEqual(contexts[-1].verify_mode, fake_ssl.CERT_NONE)
