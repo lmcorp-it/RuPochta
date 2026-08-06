@@ -11643,6 +11643,7 @@ def _managesieve_put_script(user: str, password: str, script: str) -> Tuple[bool
         ctx = _ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = _ssl.CERT_NONE
+        ctx.minimum_version = _ssl.TLSVersion.TLSv1_2
 
         def _recv_until(buf_state: Dict[str, bytes]) -> List[str]:
             """Read response lines until we see OK/NO/BYE."""
