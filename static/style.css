@@ -250,6 +250,7 @@ body[data-theme="light"] .compose-runtime-warning {
 .user-profile-button { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 5px 8px; border: 1px solid transparent; border-radius: 9px; color: inherit; background: transparent; cursor: pointer; font: inherit; }
 .user-profile-button:hover,
 .user-profile-button:focus-visible { border-color: var(--border); background: var(--bg-hover); outline: 0; }
+.user-profile-button:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(23, 92, 211, 0.35); }
 .user-profile-avatar { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: 50%; color: var(--accent); background: var(--bg-soft); font-size: 10px; font-weight: 800; }
 .user-profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .sidebar {
@@ -1702,9 +1703,9 @@ body[data-theme="light"] {
   --accent-hover: #154fae;
   --accent-2: #174ea6;
   --text: #2c3a4d;
-  --text-dim: #66758a;
+  --text-dim: #5b6a7e;
   --text-strong: #172033;
-  --text2: #7a8798;
+  --text2: #5f6d80;
   --border: #d9e0e8;
   --danger: #c4322b;
   --success: #18794e;
@@ -1725,7 +1726,7 @@ body[data-theme="dark"] {
   --text: #d6dde7;
   --text-dim: #929eae;
   --text-strong: #f6f8fb;
-  --text2: #8290a1;
+  --text2: #98a5b6;
   --border: #343e4b;
   --danger: #ff8b84;
   --success: #63c694;
@@ -5897,7 +5898,7 @@ body[data-appearance="workspace"] .message-view.empty .reader-empty-state {
   color: #071b48;
   font-size: 14px;
 }
-.login-form input::placeholder { color: #8b96ac; opacity: 1; }
+.login-form input::placeholder { color: #66738a; opacity: 1; }
 .login-form input:hover { border-color: #b7c5d9; }
 .login-form input:focus,
 .login-form input:focus-visible { border-color: #0b64f5; outline: 0; box-shadow: 0 0 0 3px rgba(11, 100, 245, .14); }
