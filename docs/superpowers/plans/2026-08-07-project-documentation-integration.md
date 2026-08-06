@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Base all recommendations on `main` commit `b8782d99819540c2ed840a96cbea5d9797b9ceae`.
+- Base all recommendations on `main` commit `bf097e23302665c412667f112cc3739485b2c7dd`.
 - Preserve the current release block until P0/P1 acceptance criteria have fresh verification evidence.
 - Do not include production secrets, internal endpoints, credentials, or personal data.
 - Keep the Markdown files authoritative; the separately generated DOCX remains a distribution artifact, not a source-of-truth file.
