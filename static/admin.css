@@ -478,6 +478,9 @@ button.sidebar-account:focus-visible {
   background: rgba(255, 255, 255, .08);
   outline: 0;
 }
+button.sidebar-account:focus-visible {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .9);
+}
 .personal-profile-card { width: min(520px, calc(100vw - 28px)); }
 .personal-profile-identity { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .personal-profile-dialog-avatar {

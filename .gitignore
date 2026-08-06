@@ -9,3 +9,5 @@ __pycache__/
 .claude/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
+
+.impeccable/
