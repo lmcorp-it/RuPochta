@@ -94,8 +94,21 @@ sudo ./deploy/bootstrap-rupochta-rf.sh --rename
 Самый короткий путь, если до гипервизора нет доступа с рабочей машины: раннер
 GitHub дотягивается до Proxmox сам.
 
-1. Settings → Secrets and variables → Actions → добавить секрет `PVE_PASSWORD`
-   (пароль учётной записи из поля `pve_user`).
+1. Settings → Secrets and variables → Actions → добавить секрет `PVE_PASSWORD`.
+   Класть туда доменный пароль не нужно — лучше завести отдельный токен
+   Proxmox с правами только на эту работу:
+
+   ```bash
+   # на гипервизоре
+   pveum user token add claude@lm.local deploy --privsep 0
+   # выводит id (claude@lm.local!deploy) и секрет — секрет и есть PVE_PASSWORD
+   pveum acl modify /vms/<vmid> --tokens 'claude@lm.local!deploy' --roles PVEVMAdmin
+   ```
+
+   Тогда в поле `pve_user` указывается id токена, а не логин. Токен отзывается
+   отдельно (`pveum user token remove`) и не даёт доступа ни к чему, кроме этой
+   ВМ.
+
 2. Actions → **deploy рупочта.рф** → Run workflow. По умолчанию это сухой
    прогон: галочка `apply` включает выполнение, отдельная галочка
    `purge_mailboxes` — удаление ящиков lets-mobile.
