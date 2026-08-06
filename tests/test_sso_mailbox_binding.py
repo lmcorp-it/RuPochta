@@ -102,6 +102,10 @@ def _load_binding_helpers(db_path: str, key: bytes):
         .replace(microsecond=0)
         .isoformat(),
         "MAIL_PROVIDER_PRESETS": _load_mail_provider_presets(),
+        # SEC-003 egress policy is exercised in test_custom_endpoint_egress.py
+        # against the real implementation. These helpers resolve provider
+        # presets, so the guard is stubbed out to keep them off the network.
+        "_reject_ssrf_targets": lambda host, port: None,
     }
     for name in (
         "_sso_binding_subject_hash",
