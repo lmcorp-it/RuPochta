@@ -13,9 +13,13 @@ server through a real session.
 
 ```bash
 cd rupochta-mcp-server
-npm install
+npm ci
 npm run build
 ```
+
+Use `npm install` instead of `npm ci` when intentionally changing dependencies.
+Node.js 18 or newer is required. The package scripts work from PowerShell,
+Windows Command Prompt, macOS, and Linux.
 
 ## Configure
 
@@ -68,6 +72,29 @@ work and writes fail with 403.
   }
 }
 ```
+
+For a local checkout on Windows, use an absolute path and forward slashes in
+the JSON configuration:
+
+```json
+{
+  "mcpServers": {
+    "rupochta": {
+      "command": "node",
+      "args": ["C:/Users/you/src/RuPochta/rupochta-mcp-server/dist/index.js"],
+      "env": {
+        "RUPOCHTA_BASE_URL": "http://127.0.0.1:18400",
+        "RUPOCHTA_READ_ONLY": "1"
+      }
+    }
+  }
+}
+```
+
+The server speaks MCP over stdio. Do not print application logs to stdout;
+the server sends startup and error diagnostics to stderr so the protocol stays
+valid. If a host supports `${PLUGIN_ROOT}` substitution, it may be used in the
+script path; otherwise replace it with the absolute plugin or checkout path.
 
 Interactive inspection: `npm run inspect`.
 
@@ -123,6 +150,8 @@ payload) and returns `structuredContent` matching its declared output schema.
 ## Test
 
 ```bash
+npm run clean
+npm run build
 npm test
 ```
 
@@ -135,6 +164,52 @@ missing messages and an unreachable instance.
 
 `evaluations/rupochta_evaluation.xml` holds ten questions answerable against that
 fixture mailbox, for measuring how well a model drives these tools.
+
+## Troubleshooting
+
+### `tsc` is not recognized
+
+Dependencies have not been installed in `rupochta-mcp-server`. Run:
+
+```powershell
+cd rupochta-mcp-server
+npm ci
+npm run build
+```
+
+If `node` itself is not recognized, install Node.js 18 or newer and restart
+the terminal.
+
+### `npm run clean` fails on Windows
+
+The current package uses a Node.js filesystem command, so this should work in
+PowerShell and Command Prompt:
+
+```powershell
+npm run clean
+```
+
+### Configuration error on startup
+
+The process exits with code `2` for invalid configuration. Check that
+`RUPOCHTA_BASE_URL` is a complete `http://` or `https://` URL, that automatic
+sign-in sets both `RUPOCHTA_EMAIL` and `RUPOCHTA_PASSWORD`, and that a
+non-loopback HTTP URL is either changed to HTTPS or explicitly allowed with
+`RUPOCHTA_ALLOW_INSECURE_HTTP=1`.
+
+### Tools report an unreachable instance or `401`
+
+Confirm that the RuPochta instance is running and reachable from the same
+machine as the MCP host. Then use either a valid email/password pair or a
+current `RUPOCHTA_SESSION_COOKIE`. Without credentials, call
+`rupochta_login` after the server connects.
+
+### Reads work but writes return `403`
+
+Set `RUPOCHTA_BASE_URL` to the public URL through which RuPochta sees the
+request, including HTTPS and the reverse-proxy hostname. Writes require a
+matching same-origin `Origin` header. Also set `RUPOCHTA_READ_ONLY=0` only when
+write tools are intentionally enabled.
 
 ## Licence
 
