@@ -39,6 +39,15 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
+for _stream in (sys.stdout, sys.stderr):
+    # Guest output round-trips through JSON as UTF-8 and can contain
+    # non-ASCII (the domain is Cyrillic). Windows consoles default to a
+    # legacy codepage that can't encode it, which crashes print() mid-run
+    # after side effects have already happened. Force UTF-8 with a lossy
+    # fallback instead of failing on an incidental encoding mismatch.
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 DEFAULT_REPO = "https://github.com/lmcorp-it/RuPochta.git"
 CHECKOUT_DIR = "/opt/rupochta-src"
 GUEST_EXEC_POLL_SECONDS = 3
