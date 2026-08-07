@@ -9,10 +9,12 @@ name: deploy рупочта.рф
 #                  password, or (preferred) the secret of a scoped Proxmox API
 #                  token, in which case `pve_user` is the token id.
 #
-# A token is the same pair other tooling already uses against this cluster —
-# PVE_API_TOKEN_ID as `pve_user`, PVE_API_TOKEN_SECRET as this secret — and it
-# reaches the API through the public nginx front end on 443, so certificate
-# verification stays on.
+# A token is the same shape other tooling already uses against this cluster —
+# the id as `pve_user`, the secret here — reaching the API through the public
+# nginx front end on 443, so certificate verification stays on. Note that a
+# read-only monitoring token is not enough: this job renames a guest and runs
+# commands inside it, so the token needs write scope (PVEVMAdmin on the guest,
+# or VM.Config + VM.Monitor + VM.GuestAgent.*).
 #
 # Put the workflow behind an environment with required reviewers if you want a
 # second pair of eyes before anything is applied.
