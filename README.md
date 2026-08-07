@@ -2,14 +2,21 @@
 
 <img src="static/brand/rupochta-wordmark.svg" alt="RuПочта" width="360">
 
-**Открытая почта для команды — на своём сервере, с приложением на каждой платформе**
+# 🚀 RuПочта
 
-[![tests](https://github.com/lmcorp-it/RuPochta/actions/workflows/tests.yml/badge.svg)](https://github.com/lmcorp-it/RuPochta/actions/workflows/tests.yml)
-[![license: MIT](https://img.shields.io/badge/license-MIT-1750d8.svg)](LICENSE)
-[![PRs welcome](https://img.shields.io/badge/PR-приветствуются-ed1b2f.svg)](CONTRIBUTING.md)
-![python](https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13-1750d8.svg)
+**Open-source webmail & admin panel — your own server, every platform**
 
-[![Открыть в Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/lmcorp-it/RuPochta)
+[![CI tests](https://github.com/lmcorp-it/RuPochta/actions/workflows/tests.yml/badge.svg)](https://github.com/lmcorp-it/RuPochta/actions/workflows/tests.yml)
+[![MIT License](https://img.shields.io/badge/license-MIT-1750d8.svg)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-приветствуются-ed1b2f.svg)](CONTRIBUTING.md)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-1750d8.svg)](#)
+[![FastAPI](https://img.shields.io/badge/FastAPI-latest-green.svg)](#)
+[![SQLite](https://img.shields.io/badge/SQLite-3-blue.svg)](#)
+[![IMAP/SMTP](https://img.shields.io/badge/IMAP/SMTP-supported-orange.svg)](#)
+[![PWA](https://img.shields.io/badge/PWA-ready-purple.svg)](#)
+[![Tauri](https://img.shields.io/badge/Tauri-2.0-ffce00.svg)](#)
+
+[![Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/lmcorp-it/RuPochta)
 
 [rupochta.tech](https://rupochta.tech) · [рупочта.рф](https://рупочта.рф) ·
 [Обсуждения](https://github.com/lmcorp-it/RuPochta/discussions) ·
@@ -19,37 +26,43 @@
 
 ---
 
-RuПочта — open-source замена Outlook Web App, «Почты» Windows и мобильных
+## 📋 Что это такое?
+
+**RuПочта** — open-source замена Outlook Web App, «Почты» Windows и мобильных
 почтовых клиентов. Один процесс FastAPI/uvicorn отдаёт почтовый интерфейс и
-админ-панель поверх обычных IMAP и SMTP: писем у себя не хранит, чужую
+админ-панель поверх обычных IMAP и SMTP: **писем у себя не хранит**, чужую
 инфраструктуру не требует, ставится на свой сервер за вечер.
 
-Работает и как self-hosted инсталляция на одну компанию, и как основа
-SaaS-сервиса: каталог сотрудников многодоменный, ящики и алиасы заводятся из
+Работает и как **self-hosted** инсталляция на одну компанию, и как основа
+**SaaS-сервиса**: каталог сотрудников многодоменный, ящики и алиасы заводятся из
 админ-панели, вход — по паролю ящика или через внешний OIDC.
 
-## Домены проекта
+---
+
+## 🌐 Домены проекта
 
 У проекта два домена, и они делают разное:
 
-| Домен | Что это | Регистрация ящиков |
+| 🌍 Домен | 💡 Что это | 📝 Регистрация ящиков |
 |---|---|---|
 | **[рупочта.рф](https://рупочта.рф)** | Живой публичный сервис на этом коде | Открытая: ящик `@рупочта.рф` заводит себе любой желающий на `/signup` |
 | **[rupochta.tech](https://rupochta.tech)** | Технический сайт проекта: описание, документация, ссылки | Закрытая: почта `@rupochta.tech` только у владельца домена |
 
-Публичная регистрация — отдельная возможность, выключенная по умолчанию
-(`MAIL_PUBLIC_SIGNUP`). Корпоративная установка, обновившись, открытой не
-становится: без этой переменной формы регистрации просто нет, а `POST
-/api/signup` отвечает 403. Порядок вывода публичного сервиса в живой режим —
-[docs/deploy-rupochta-rf.md](docs/deploy-rupochta-rf.md).
+> ℹ️ Публичная регистрация — отдельная возможность, выключенная по умолчанию
+> (`MAIL_PUBLIC_SIGNUP`). Корпоративная установка, обновившись, открытой не
+> становится: без этой переменной формы регистрации просто нет, а `POST
+> /api/signup` отвечает 403. Порядок вывода публичного сервиса в живой режим —
+> [docs/deploy-rupochta-rf.md](docs/deploy-rupochta-rf.md).
 
-## Платформы
+---
+
+## 🖥️ Платформы
 
 Веб-интерфейс работает везде уже сейчас, а полноценные нативные клиенты —
 следующая большая цель проекта. Мы проектируем настоящие приложения с
 установщиками, автообновлением и системной интеграцией, а не ярлык на страницу.
 
-| Платформа | Сейчас | В разработке |
+| 📱 Платформа | ✅ Сейчас | 🚧 В разработке |
 |---|---|---|
 | **Windows** | PWA: «Установить приложение» в Chrome/Edge, ярлык в «Пуск» | нативный клиент, установщики `.msi` и `.exe`, автозапуск, обработчик `mailto:` |
 | **macOS** | PWA: Safari → «Добавить в Dock» | приложение `.app` в `.dmg`, подпись и нотаризация, Центр уведомлений |
@@ -58,35 +71,55 @@ SaaS-сервиса: каталог сотрудников многодомен�
 | **iOS / iPadOS** | PWA: Safari → «На экран "Домой"» | нативный клиент, TestFlight и App Store |
 
 Офлайн-оболочка и кэш — на service worker, уведомления — на Web Push.
-Разрабатывать проект можно с любой из этих систем: нужен только Python 3.11+ и
-браузер.
+Разрабатывать проект можно с любой из этих систем: нужен только **Python 3.11+**
+и браузер.
 
-**Каркас клиента уже есть.** [`desktop/`](desktop/) — приложение на Tauri 2:
-собирается и упаковывается в `.deb`, `.rpm`, AppImage, `.msi`, `.exe` и `.dmg`,
-установщики собирает [CI](.github/workflows/desktop.yml) на раннерах каждой
-системы. Это рабочий каркас, а не готовый продукт: впереди подпись,
-автообновление, системные уведомления и мобильные сборки. Ищем тех, кто работал
-с Rust, Kotlin, Swift или упаковкой установщиков.
+> 🛠️ **Каркас клиента уже есть.** [`desktop/`](desktop/) — приложение на **Tauri 2**:
+> собирается и упаковывается в `.deb`, `.rpm`, AppImage, `.msi`, `.exe` и `.dmg`,
+> установщики собирает [CI](.github/workflows/desktop.yml) на раннерах каждой
+> системы. Это рабочий каркас, а не готовый продукт: впереди подпись,
+> автообновление, системные уведомления и мобильные сборки. Ищем тех, кто работал
+> с Rust, Kotlin, Swift или упаковкой установщиков.
 
-## Что умеет
+---
 
+## ✨ Что умеет
+
+### 📧 Почта
 - Почта поверх IMAP/SMTP: папки, поиск, вложения, inline-картинки, черновики,
   подписи, шаблоны ответов.
-- Вход по паролю ящика и через внешний OIDC-провайдер, привязка Telegram.
+
+### 🔐 Аутентификация и доступ
+- Вход по паролю ящика и через внешний **OIDC**-провайдер, привязка **Telegram**.
+
+### ⚙️ Администрирование
 - Админ-панель на том же процессе (`/admin`): ящики, алиасы, многодоменный
-  каталог сотрудников, синхронизация с LDAP/AD.
+  каталог сотрудников, синхронизация с **LDAP/AD**.
+
+### 🔌 Внешние ящики
 - Подключение внешнего ящика (Яндекс, Яндекс 360, Mail.ru, VK WorkSpace или
   свой IMAP) рядом с основным: чтение и отправка идут через его собственный
   сервер, а не через локальный релей.
+
+### 📝 Регистрация
 - Самостоятельная регистрация ящиков на публичном домене — с лимитом по IP,
   списком зарезервированных служебных адресов и проверкой пароля. Выключена по
   умолчанию, включается одной переменной.
-- MCP-сервер (`rupochta-mcp-server/`): почтовый ящик как набор инструментов для
-  LLM-агента — чтение, поиск, отправка, папки, фильтры, отложенная отправка.
+
+### 🤖 MCP-сервер
+- [`rupochta-mcp-server/`](rupochta-mcp-server/): почтовый ящик как набор
+  инструментов для **LLM-агента** — чтение, поиск, отправка, папки, фильтры,
+  отложенная отправка.
+
+### 🔗 Интеграции
 - Опционально: приём писем как заявок во внешний helpdesk, CalDAV-проксирование,
   агент управления ботом.
 
-## Быстрый старт
+---
+
+## ⚡ Быстрый старт
+
+### Python + uvicorn
 
 ```bash
 git clone https://github.com/lmcorp-it/RuPochta.git && cd RuPochta
@@ -98,10 +131,11 @@ export WEBMAIL_DB=/var/lib/rupochta/webmail_aliases.db
 ```
 
 Приложение слушает loopback и рассчитано на обратный прокси (nginx, Caddy),
-который терминирует TLS и передаёт `X-Real-IP`. Состояние: `/health` — процесс
-жив, `/ready` — доступны IMAP и SMTP.
+который терминирует TLS и передаёт `X-Real-IP. Состояние:
+- `/health` — процесс жив
+- `/ready` — доступны IMAP и SMTP
 
-### Docker
+### 🐳 Docker
 
 ```bash
 docker build -t rupochta .
@@ -110,7 +144,7 @@ docker run -p 18400:18400 -v rupochta-data:/data \
   -e MAIL_ADMIN_KEY=... -e WEBMAIL_SECRET_KEY=... rupochta
 ```
 
-### Разработка за 5 минут
+### 🧪 Разработка за 5 минут
 
 Локальный стенд с встроенным IMAP/SMTP-сервером — реальный почтовый сервер не
 нужен. Поднимает RuПочту и [Greenmail](https://greenmail-mail-test.github.io/greenmail/)
@@ -121,18 +155,20 @@ cp .env.dev.example .env.dev
 docker compose -f docker-compose.dev.yml --env-file .env.dev up --build
 ```
 
-Открыть `http://localhost:18400`, войти как `demo@example.local` /
+Откройте `http://localhost:18400`, войдите как `demo@example.local` /
 `demo-password` (заведены также `alice` и `bob`). Отправленные письма
 доставляются локально между этими ящиками. Всё состояние — в томе
 `rupochta-dev-data`; чтобы начать с чистого листа, остановите стенд и
 удалите том: `docker compose -f docker-compose.dev.yml down -v`.
 
-## Конфигурация
+---
+
+## ⚙️ Конфигурация
 
 Всё задаётся переменными окружения. Дефолты в репозитории нейтральные
 (`example.com`, `corp.local`), рабочих значений и секретов здесь нет.
 
-| Переменная | Назначение |
+| 🔧 Переменная | 📋 Назначение |
 |---|---|
 | `MAIL_DOMAIN`, `MAIL_HOST`, `MAIL_IMAP_PORT`, `MAIL_SMTP_PORT` | почтовый контур |
 | `WEBMAIL_SECRET_KEY` | подпись сессионных куки (обязательна) |
@@ -149,13 +185,15 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev up --build
 | `MAIL_TICKET_INTAKE_URL`, `INTEGRATION_WEBHOOK_SECRET` | приём писем как заявок |
 | `RUPOCHTA_INTERNAL_TOKEN`, `PROXY_PANEL_URL` | внутренние интеграции (необязательны) |
 
-Незаданные интеграции просто выключены: сервер стартует и обслуживает почту.
+> 💡 Незаданные интеграции просто выключены: сервер стартует и обслуживает почту.
 
-## Планы
+---
+
+## 🗺️ Планы
 
 Ближайшее, и по каждому пункту нужны руки:
 
-**Нативные клиенты**
+### 🖥️ Нативные клиенты
 
 - [x] Выбрать стек и собрать первый десктопный клиент — Tauri 2, см. [`desktop/`](desktop/).
 - [ ] Windows: установщики `.msi` и `.exe`, автообновление, `mailto:`.
@@ -164,7 +202,7 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev up --build
 - [ ] Android: нативный клиент и публикация.
 - [ ] iOS: нативный клиент, TestFlight и App Store.
 
-**Почта и интеграции**
+### 📮 Почта и интеграции
 
 - [x] Подключение Яндекс, Яндекс 360, Mail.ru, VK WorkSpace: пресеты хостов и
       per-mailbox SMTP.
@@ -174,7 +212,9 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev up --build
 - [x] Готовый `docker compose` с локальным почтовым сервером для разработки —
       см. раздел «Разработка за 5 минут».
 
-## Присоединяйтесь
+---
+
+## 🤝 Присоединяйтесь
 
 Проект молодой и открытый — берите задачу, предлагайте свою, приносите баг-репорт
 или правку в текстах. Начните с
@@ -185,27 +225,34 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev up --build
 
 Понравился проект — поставьте ⭐, так его находят другие.
 
-## Структура
+---
 
-- `rupochta_server.py` — приложение (аутентификация, мост IMAP/SMTP, каталог,
-  админ-API, SSO, публичная регистрация).
-- `rupochta_control_agent.py` — агент управления ботом.
-- `imap_docker_proxy.py` — вспомогательный локальный IMAP-прокси.
-- `rupochta-mcp-server/` — MCP-сервер для LLM-агентов (TypeScript).
-- `deploy/` — установка публичного сервиса: systemd, nginx, скрипты.
-- `static/` — фронтенд почты и админки, service worker.
-- `tests/` — тесты: `python3 -m unittest discover -s tests`.
-- `DESIGN.md`, `tokens.json` — дизайн-токены интерфейса.
+## 📁 Структура
 
-## Лицензия
+| 📂 Директория | 📝 Описание |
+|---|---|
+| `rupochta_server.py` | Приложение: аутентификация, мост IMAP/SMTP, каталог, админ-API, SSO, публичная регистрация |
+| `rupochta_control_agent.py` | Агент управления ботом |
+| `imap_docker_proxy.py` | Вспомогательный локальный IMAP-прокси |
+| `rupochta-mcp-server/` | MCP-сервер для LLM-агентов (TypeScript) |
+| `deploy/` | Установка публичного сервиса: systemd, nginx, скрипты |
+| `static/` | Фронтенд почты и админки, service worker |
+| `tests/` | Тесты: `python3 -m unittest discover -s tests` |
+| `DESIGN.md`, `tokens.json` | Дизайн-токены интерфейса |
 
-MIT — см. [LICENSE](LICENSE). Вендорённые библиотеки и их лицензии перечислены
+---
+
+## 📄 Лицензия
+
+**MIT** — см. [LICENSE](LICENSE). Вендорённые библиотеки и их лицензии перечислены
 в [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ---
 
 <details>
-<summary>In English</summary>
+<summary><strong>🇬🇧 In English</strong></summary>
+
+## RuPochta — Open-Source Webmail
 
 **RuPochta** is an open-source webmail client and admin panel — a self-hosted
 alternative to Outlook Web App and the built-in Windows/mobile mail clients. It
