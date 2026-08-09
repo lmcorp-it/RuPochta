@@ -294,7 +294,12 @@ def main() -> int:
         checkout = (
             f"set -euo pipefail\n"
             f"if [ -d {CHECKOUT_DIR}/.git ]; then\n"
-            f"  git -C {CHECKOUT_DIR} fetch --depth 1 origin {args.branch}\n"
+            # The clone below is --depth 1 --branch, which configures a refspec
+            # for that one branch only. `fetch origin <other branch>` then moves
+            # FETCH_HEAD and nothing else, so origin/<other branch> never exists
+            # and the checkout fails. Name the destination ref explicitly.
+            f"  git -C {CHECKOUT_DIR} fetch --depth 1 origin "
+            f"'+refs/heads/{args.branch}:refs/remotes/origin/{args.branch}'\n"
             f"  git -C {CHECKOUT_DIR} checkout -B {args.branch} origin/{args.branch}\n"
             f"else\n"
             f"  git clone --depth 1 --branch {args.branch} {args.repo} {CHECKOUT_DIR}\n"
