@@ -1,12 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "RuPochta",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "identifier": "ru.rupochta.desktop",
   "build": {
     "frontendDist": "../web"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "RuPochta — вход и регистрация",
@@ -25,7 +26,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": [
+      "nsis",
+      "msi"
+    ],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -34,8 +39,21 @@
     ],
     "windows": {
       "nsis": {
-        "languages": ["Russian"],
+        "languages": [
+          "Russian"
+        ],
         "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ4MjgxMEJDNjI1MUM2RUEKUldUcXhsRml2QkFvMkJNMW5sS2hJZHVWUy9zc0FCVittdkpiRGl4amU2MS9OZTJJQWEwMmRCV1QK",
+      "endpoints": [
+        "https://github.com/lmcorp-it/RuPochta/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

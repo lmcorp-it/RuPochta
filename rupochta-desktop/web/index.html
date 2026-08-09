@@ -1064,5 +1064,76 @@
   }
 })();
 </script>
+<!-- updater: Tauri 2 auto-update banner -->
+<script>
+(function () {
+  function hasTauri() {
+    return typeof window !== 'undefined' && window.__TAURI__ && window.__TAURI__.core;
+  }
+  var updater = { checking: false, update: null, available: false };
+  function makeBanner() {
+    var el = document.createElement('div');
+    el.id = 'updater-banner';
+    el.setAttribute('role', 'status');
+    el.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;display:none;align-items:center;gap:12px;max-width:min(92vw,560px);padding:10px 16px;border-radius:12px;background:#101a30;border:1px solid rgba(31,102,229,0.5);box-shadow:0 8px 30px rgba(0,0,0,0.45);font-family:inherit;font-size:13.5px;color:#e8eef9;';
+    el.innerHTML = '<span id="updater-msg" style="flex:1;"></span>' +
+      '<button id="updater-btn" type="button" style="flex:none;padding:6px 14px;border:0;border-radius:8px;background:#1f66e5;color:#fff;font:inherit;font-weight:650;cursor:pointer;">Обновить</button>' +
+      '<button id="updater-x" type="button" aria-label="Скрыть" style="flex:none;width:26px;height:26px;border:0;border-radius:7px;background:rgba(203,220,245,0.12);color:#8fa0bf;font:inherit;font-size:14px;cursor:pointer;line-height:1;">✕</button>';
+    document.body.appendChild(el);
+    return el;
+  }
+  function setBanner(state, msg) {
+    var el = document.getElementById('updater-banner');
+    if (!el) return;
+    el.style.display = 'flex';
+    document.getElementById('updater-msg').textContent = msg;
+    var btn = document.getElementById('updater-btn');
+    var x = document.getElementById('updater-x');
+    if (state === 'available') { btn.style.display = ''; x.style.display = ''; }
+    else if (state === 'busy') { btn.style.display = 'none'; x.style.display = 'none'; }
+    else { btn.style.display = 'none'; x.style.display = ''; }
+  }
+  async function check() {
+    if (!hasTauri() || updater.checking) return;
+    updater.checking = true;
+    try {
+      var checkRes = await window.__TAURI__.core.invoke('plugin:updater|check');
+      if (checkRes && checkRes.version) {
+        updater.available = true;
+        updater.update = checkRes;
+        var cur = '';
+        try { cur = await window.__TAURI__.core.invoke('plugin:app|version'); } catch (e) {}
+        setBanner('available', 'Доступна новая версия ' + checkRes.version + (cur ? ' (у вас ' + cur + ')' : '') + '.');
+        document.getElementById('updater-btn').onclick = install;
+      }
+    } catch (e) { /* no update or offline — тихо */ }
+    updater.checking = false;
+  }
+  async function install() {
+    if (!updater.update) return;
+    setBanner('busy', 'Скачиваем обновление…');
+    try {
+      await window.__TAURI__.core.invoke('plugin:updater|download_and_install', { update: updater.update });
+      setBanner('busy', 'Обновление установлено. Перезапускаем…');
+      setTimeout(function () {
+        window.__TAURI__.core.invoke('plugin:process|restart').catch(function () {});
+      }, 800);
+    } catch (e) {
+      setBanner('error', 'Не удалось установить обновление: ' + (e && e.message ? e.message : 'ошибка'));
+    }
+  }
+  function init() {
+    if (!hasTauri()) return;
+    makeBanner();
+    document.getElementById('updater-x').onclick = function () {
+      document.getElementById('updater-banner').style.display = 'none';
+    };
+    check();
+    setInterval(check, 60 * 60 * 1000);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
 </body>
 </html>
