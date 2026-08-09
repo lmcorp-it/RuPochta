@@ -24,6 +24,7 @@ APP_DIR="/opt/rupochta"
 ENV_FILE="/etc/rupochta/rupochta.env"
 STATE_DIR="/var/lib/rupochta"
 SERVICE_USER="rupochta"
+APP_PORT=18400
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN_PUNYCODE"
 RENAME=0
 OBTAIN_CERT=0
@@ -144,6 +145,49 @@ systemctl restart nginx
 
 # ------------------------------------------------------------------- start
 step "starting RuPochta"
+
+# Anything listening on the application port is, by definition, an older
+# RuPochta — usually an earlier install under a different unit name. uvicorn
+# would exit with "address already in use" while `systemctl restart` still
+# reported success, leaving the stale build serving the public. Hand the port
+# over first, and name what was stopped.
+port_owner_pid() {
+  ss -ltnp 2>/dev/null | awk -v p=":$APP_PORT\$" '$4 ~ p' \
+    | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -1
+}
+unit_of_pid() {   # 0::/system.slice/whatever.service -> whatever.service
+  sed -n 's|.*/\([^/]*\.service\)$|\1|p' "/proc/$1/cgroup" 2>/dev/null | head -1
+}
+
+squatter="$(port_owner_pid || true)"
+if [ -n "${squatter:-}" ]; then
+  squatter_cmd="$(tr '\0' ' ' < "/proc/$squatter/cmdline" 2>/dev/null || true)"
+  owner_unit="$(unit_of_pid "$squatter" || true)"
+
+  # Stop only something that is demonstrably another copy of this application.
+  # A container would publish the port through docker-proxy, and disabling
+  # docker.service on this box would take the mail server down with it.
+  case "$squatter_cmd" in
+    *rupochta_server*|*uvicorn*) mine=1 ;;
+    *)                           mine=0 ;;
+  esac
+
+  if [ "${owner_unit:-}" = "rupochta.service" ]; then
+    :   # our own unit — the restart below replaces it
+  elif [ "$mine" -eq 0 ] || [ -z "${owner_unit:-}" ]; then
+    echo "port $APP_PORT is held by pid $squatter and this script will not stop it:" >&2
+    echo "  unit: ${owner_unit:-none (not managed by systemd)}" >&2
+    echo "  cmd:  $squatter_cmd" >&2
+    echo "Only a RuPochta instance owned by a unit is taken over automatically." >&2
+    exit 1
+  else
+    echo "port $APP_PORT is held by $owner_unit — an earlier install of this service"
+    echo "  cmd: $squatter_cmd"
+    echo "stopping and disabling it so this deployment can take the port"
+    systemctl disable --now "$owner_unit"
+  fi
+fi
+
 systemctl restart rupochta.service
 sleep 2
 
@@ -154,29 +198,29 @@ sleep 2
 if ! systemctl is-active --quiet rupochta.service; then
   echo "rupochta.service is not running after restart:" >&2
   systemctl --no-pager --lines=20 status rupochta.service >&2 || true
-  ss -ltnp 2>/dev/null | grep ':18400' >&2 || true
+  ss -ltnp 2>/dev/null | grep ":$APP_PORT" >&2 || true
   exit 1
 fi
 
-if curl -fsS http://127.0.0.1:18400/health >/dev/null; then
+if curl -fsS http://127.0.0.1:$APP_PORT/health >/dev/null; then
   echo "health: ok"
 else
   echo "health check failed — journalctl -u rupochta -n 50" >&2
   exit 1
 fi
-curl -fsS http://127.0.0.1:18400/ready >/dev/null \
+curl -fsS http://127.0.0.1:$APP_PORT/ready >/dev/null \
   && echo "ready:  ok (IMAP and SMTP reachable)" \
   || echo "ready:  NOT ok — the mail path is not answering yet"
 
 # /health has answered for every version this service has ever had, so it
 # cannot tell a fresh deploy from a stale process still holding the port. Ask
 # for a route only current code serves.
-if curl -fsS http://127.0.0.1:18400/api/signup/config >/dev/null 2>&1; then
+if curl -fsS http://127.0.0.1:$APP_PORT/api/signup/config >/dev/null 2>&1; then
   echo "signup: /api/signup/config present"
 else
   echo "signup: /api/signup/config is missing — whatever answers on 18400 is" >&2
   echo "        not the build just installed. Open registration would 404." >&2
-  ss -ltnp 2>/dev/null | grep ':18400' >&2 || true
+  ss -ltnp 2>/dev/null | grep ":$APP_PORT" >&2 || true
   exit 1
 fi
 
