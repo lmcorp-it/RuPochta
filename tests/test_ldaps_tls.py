@@ -32,7 +32,7 @@ def _openssl_present() -> bool:
 
 def _supports_not_after() -> bool:
     """`-not_after` появился только в OpenSSL 3.5. На более старых сборках
-    просроченный сертификат выписывается через `openssl ca` (см. _expired)."""
+    просроченный сертификат выписывается через `openssl ca` (см. _expired_cert)."""
     if not _openssl_present():
         return False
     done = subprocess.run(["openssl", "req", "-help"], capture_output=True, text=True)
@@ -240,19 +240,33 @@ class LdapConfigurationTests(unittest.TestCase):
         и не отличает вызов внутри помощника от вызова где угодно ещё.
         """
         tree = ast.parse(SERVER_SRC)
+        # Обходим всё дерево и запоминаем ближайшую функцию для каждого узла:
+        # если начинать с определений функций, вызов на уровне модуля
+        # (LDAP_SERVER = Server(...)) в проверку не попадёт.
+        enclosing = {}
+
+        def mark(node, fn):
+            for child in ast.iter_child_nodes(node):
+                inner_fn = (
+                    child.name
+                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    else fn
+                )
+                enclosing[child] = inner_fn
+                mark(child, inner_fn)
+
+        mark(tree, None)
         outside = []
         for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if not isinstance(node, ast.Call):
                 continue
-            if node.name == "_ldap_server":
+            func = node.func
+            name = getattr(func, "id", None) or getattr(func, "attr", None)
+            if name != "Server":
                 continue
-            for inner in ast.walk(node):
-                if (
-                    isinstance(inner, ast.Call)
-                    and isinstance(inner.func, ast.Name)
-                    and inner.func.id == "Server"
-                ):
-                    outside.append(f"{node.name}:{inner.lineno}")
+            where = enclosing.get(node)
+            if where != "_ldap_server":
+                outside.append(f"{where or '<уровень модуля>'}:{node.lineno}")
         self.assertEqual(
             outside, [],
             f"ldap3.Server создаётся в обход _ldap_server: {outside}",

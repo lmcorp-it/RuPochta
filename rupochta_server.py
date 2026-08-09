@@ -539,9 +539,15 @@ def _ldap_server(srv_url: str, **kwargs):
         raise ValueError(f"Malformed LDAP URL: {exc}") from None
     if not host:
         raise ValueError("LDAP URL without a host")
+    # `port or 636` принял бы явный :0 за отсутствующий порт и молча подставил
+    # штатный — лучше сказать, что адрес неверный.
+    if port is None:
+        port = 636
+    elif not 1 <= port <= 65535:
+        raise ValueError("LDAP URL with an out-of-range port")
     return Server(
         host,
-        port=port or 636,
+        port=port,
         use_ssl=True,
         tls=_ldap_tls(),
         **kwargs,
