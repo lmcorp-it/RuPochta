@@ -33,7 +33,9 @@ on:
       vm:
         description: "Guest vmid, exact name, or unique name fragment"
         required: true
-        default: "mail"
+        # The guest has already been renamed, so the old "mail" no longer
+        # resolves — a dispatch that keeps the defaults must still find it.
+        default: "rupochta-rf"
       new_name:
         description: "New guest name"
         required: true

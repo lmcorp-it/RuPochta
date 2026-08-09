@@ -7,6 +7,11 @@
 #
 #   sudo ./bootstrap-rupochta-rf.sh                 # install, keep host name
 #   sudo ./bootstrap-rupochta-rf.sh --rename        # also rename the host
+#   sudo ./bootstrap-rupochta-rf.sh --tls           # also request the certificate
+#
+# Without a certificate the site is served over plain HTTP, so that nginx comes
+# up at all and the ACME challenge can be answered. Get a certificate as soon
+# as the domain resolves here: --tls does it, or run certbot by hand and re-run.
 #
 # Run it on the mail VM (the one currently answering as mail.lets-mobile.ru),
 # from a checkout of this repository.
@@ -19,7 +24,10 @@ APP_DIR="/opt/rupochta"
 ENV_FILE="/etc/rupochta/rupochta.env"
 STATE_DIR="/var/lib/rupochta"
 SERVICE_USER="rupochta"
+CERT_DIR="/etc/letsencrypt/live/$DOMAIN_PUNYCODE"
 RENAME=0
+OBTAIN_CERT=0
+ACME_EMAIL="${ACME_EMAIL:-}"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -27,7 +35,9 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --rename) RENAME=1 ;;
     --hostname) shift; NEW_HOSTNAME="${1:?--hostname needs a value}"; RENAME=1 ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    --tls) OBTAIN_CERT=1 ;;
+    --acme-email) shift; ACME_EMAIL="${1:?--acme-email needs a value}"; OBTAIN_CERT=1 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -105,29 +115,49 @@ install -d /etc/nginx/snippets /etc/nginx/conf.d
 install -m 0644 "$REPO_DIR/deploy/nginx/snippets/rupochta-proxy.conf" /etc/nginx/snippets/rupochta-proxy.conf
 install -m 0644 "$REPO_DIR/deploy/nginx/conf.d/rupochta-limits.conf" /etc/nginx/conf.d/rupochta-limits.conf
 install -m 0644 "$REPO_DIR/deploy/nginx/rupochta-rf.conf" /etc/nginx/sites-available/rupochta-rf.conf
-ln -sf /etc/nginx/sites-available/rupochta-rf.conf /etc/nginx/sites-enabled/rupochta-rf.conf
+install -m 0644 "$REPO_DIR/deploy/nginx/rupochta-rf-bootstrap.conf" /etc/nginx/sites-available/rupochta-rf-bootstrap.conf
 rm -f /etc/nginx/sites-enabled/default
 
-if [ ! -d "/etc/letsencrypt/live/$DOMAIN_PUNYCODE" ]; then
-  cat <<EOF
+# The production config names files under /etc/letsencrypt/live/, so nginx
+# refuses to load it before certbot has run — and a refusing nginx serves
+# nothing at all, including the ACME challenge that would produce the
+# certificate. Serve HTTP only until the certificate exists, then switch.
+enable_site() {
+  ln -sf "/etc/nginx/sites-available/$1" /etc/nginx/sites-enabled/rupochta-rf.conf
+}
 
-TLS certificate for $DOMAIN_PUNYCODE is not present yet, so nginx will not
-start with this config. Point the DNS at this host, then run:
-
-  certbot certonly --webroot -w /var/www/certbot \\
-    -d $DOMAIN_PUNYCODE -d www.$DOMAIN_PUNYCODE -d mail.$DOMAIN_PUNYCODE
-
-and re-run this script (or just: nginx -t && systemctl reload nginx).
-EOF
+if [ -d "$CERT_DIR" ]; then
+  enable_site rupochta-rf.conf
+  echo "certificate present — serving HTTPS"
 else
-  nginx -t
-  systemctl reload nginx
+  enable_site rupochta-rf-bootstrap.conf
+  echo "no certificate for $DOMAIN_PUNYCODE yet — serving plain HTTP for now."
+  echo "Anything in front of this host must terminate TLS, or mailbox passwords"
+  echo "travel in the clear. Re-run with --tls once the DNS points here."
 fi
+
+# Always prove the config loads and that nginx is actually up: a front end that
+# fails to start is exactly the failure this script used to report as success.
+nginx -t
+systemctl enable nginx >/dev/null 2>&1 || true
+systemctl restart nginx
 
 # ------------------------------------------------------------------- start
 step "starting RuPochta"
 systemctl restart rupochta.service
 sleep 2
+
+# Type=simple means `systemctl restart` returns as soon as the process is
+# forked, so a unit that dies immediately — most often because something else
+# already holds 18400 — still looks like a clean restart, and the health check
+# below happily answers from whatever is really on that port.
+if ! systemctl is-active --quiet rupochta.service; then
+  echo "rupochta.service is not running after restart:" >&2
+  systemctl --no-pager --lines=20 status rupochta.service >&2 || true
+  ss -ltnp 2>/dev/null | grep ':18400' >&2 || true
+  exit 1
+fi
+
 if curl -fsS http://127.0.0.1:18400/health >/dev/null; then
   echo "health: ok"
 else
@@ -138,10 +168,62 @@ curl -fsS http://127.0.0.1:18400/ready >/dev/null \
   && echo "ready:  ok (IMAP and SMTP reachable)" \
   || echo "ready:  NOT ok — the mail path is not answering yet"
 
-cat <<EOF
+# /health has answered for every version this service has ever had, so it
+# cannot tell a fresh deploy from a stale process still holding the port. Ask
+# for a route only current code serves.
+if curl -fsS http://127.0.0.1:18400/api/signup/config >/dev/null 2>&1; then
+  echo "signup: /api/signup/config present"
+else
+  echo "signup: /api/signup/config is missing — whatever answers on 18400 is" >&2
+  echo "        not the build just installed. Open registration would 404." >&2
+  ss -ltnp 2>/dev/null | grep ':18400' >&2 || true
+  exit 1
+fi
 
-Installed. Remaining manual steps are in docs/deploy-rupochta-rf.md:
+# --------------------------------------------------------------------- TLS
+# Deliberately last: the challenge is served by the nginx started above, which
+# is why this could never have worked from the old ordering.
+if [ "$OBTAIN_CERT" -eq 1 ] && [ ! -d "$CERT_DIR" ]; then
+  step "requesting a TLS certificate"
+  cert_names=("$DOMAIN_PUNYCODE")
+  for name in "www.$DOMAIN_PUNYCODE" "mail.$DOMAIN_PUNYCODE"; do
+    # A name that does not resolve fails the whole order, so ask only for the
+    # ones that are actually delegated here.
+    if getent hosts "$name" >/dev/null 2>&1; then
+      cert_names+=("$name")
+    else
+      echo "skipping $name — it does not resolve yet"
+    fi
+  done
+  certbot_args=(certonly --webroot -w /var/www/certbot --non-interactive --agree-tos)
+  if [ -n "$ACME_EMAIL" ]; then
+    certbot_args+=(-m "$ACME_EMAIL")
+  else
+    certbot_args+=(--register-unsafely-without-email)
+  fi
+  for name in "${cert_names[@]}"; do certbot_args+=(-d "$name"); done
+
+  if certbot "${certbot_args[@]}"; then
+    enable_site rupochta-rf.conf
+    nginx -t
+    systemctl reload nginx
+    echo "certificate installed — now serving HTTPS"
+  else
+    echo "certbot failed; the site stays on plain HTTP until it succeeds." >&2
+    echo "A CDN in front of the origin must forward /.well-known/acme-challenge/" >&2
+    echo "to this host without redirecting it to HTTPS." >&2
+  fi
+fi
+
+echo
+if [ -d "$CERT_DIR" ]; then
+  echo "Installed, serving HTTPS from this host."
+else
+  echo "Installed, serving plain HTTP — TLS is still terminated by whatever sits"
+  echo "in front of this host. Re-run with --tls to hold the certificate here."
+fi
+cat <<EOF
+Remaining steps are in docs/deploy-rupochta-rf.md:
   1. DNS for $DOMAIN_PUNYCODE (A, MX, SPF, DKIM, DMARC, PTR)
-  2. TLS certificate (certbot command above)
-  3. verify registration: https://$DOMAIN_PUNYCODE/signup
+  2. verify registration: https://$DOMAIN_PUNYCODE/signup
 EOF

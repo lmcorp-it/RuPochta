@@ -320,12 +320,23 @@ def main() -> int:
             preview = f"set -euo pipefail\ncd {CHECKOUT_DIR}\nbash deploy/purge-lets-mobile-mailboxes.sh"
             shell(api, node, vmid, preview, "lets-mobile mailboxes (listing only)", args.apply)
 
+        # Report a status code per endpoint rather than piping curl into `&& echo`:
+        # a failing curl on the left of `&&` does not trip `set -e`, so the old
+        # form let a 404 on the signup route pass for a healthy deployment.
         verify = (
-            "set -euo pipefail\n"
-            "curl -fsS http://127.0.0.1:18400/health && echo\n"
-            "curl -fsS http://127.0.0.1:18400/api/signup/config && echo\n"
-            "curl -fsS http://127.0.0.1:18400/ready && echo || echo 'ready: mail path not answering yet'"
-        )
+            "set -uo pipefail\n"
+            "echo \"nginx:    $(systemctl is-active nginx 2>&1)\"\n"
+            "echo \"rupochta: $(systemctl is-active rupochta.service 2>&1)\"\n"
+            "echo \"source:   $(git -C %s log --oneline -1 2>&1)\"\n"
+            "for path in /health /ready /api/signup/config /signup; do\n"
+            "  code=$(curl -s -o /tmp/rupochta-verify -w '%%{http_code}' "
+            "--max-time 10 \"http://127.0.0.1:18400$path\" || echo 000)\n"
+            "  echo \"  $path -> $code $(head -c 160 /tmp/rupochta-verify | tr -d '\\n')\"\n"
+            "done\n"
+            "rm -f /tmp/rupochta-verify\n"
+            "curl -s -o /dev/null -w 'local nginx :80 -> %%{http_code}\\n' "
+            "--max-time 10 http://127.0.0.1/ || true"
+        ) % CHECKOUT_DIR
         shell(api, node, vmid, verify, "verifying the service inside the guest", args.apply)
 
         if not args.apply:
