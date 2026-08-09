@@ -1,0 +1,18 @@
+[Unit]
+Description=RuPochta start page (login + signup) — Rust/Axum
+After=network.target
+
+[Service]
+Type=simple
+User=rupochta
+WorkingDirectory=/opt/rupochta-rust
+ExecStart=/opt/rupochta-rust/rupochta-web
+Restart=on-failure
+RestartSec=3
+Environment=RUPOCHTA_BIND=0.0.0.0:8080
+Environment=RUPOCHTA_DOMAIN=example.com
+Environment=RUPOCHTA_SIGNUP_ENABLED=1
+Environment=RUPOCHTA_MIN_PASSWORD=10
+
+[Install]
+WantedBy=multi-user.target
