@@ -30,6 +30,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: src-tauri
+          beforeBuildCommand: ""
           tagName: desktop-v__VERSION__
           releaseName: "RuPochta Desktop v__VERSION__"
           releaseBody: "Windows-приложение RuPochta (вход, регистрация, рабочее место «Фокус»).\n\n- RuPochta_*_x64-setup.exe — установщик NSIS\n- RuPochta_*_x64_en-US.msi — MSI (WiX)\n- rupochta-desktop.exe — портативный exe\n\nФронтенд: V3-сборка стартовой страницы. Иконка — из 3D-логотипа RuPochta."
