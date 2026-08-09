@@ -21,9 +21,12 @@ to_punycode() {
       # Конвертация нужна раньше, чем блок установки пакетов ниже: имя хоста
       # участвует во всех последующих шагах. В cloud-образе Debian python3 уже
       # есть (его требует cloud-init), но на урезанном образе — доставим.
+      # Вывод apt строго в stderr: stdout этой функции забирает подстановка,
+      # и любая строка dpkg оттуда попала бы прямо в имя хоста.
       if ! command -v python3 >/dev/null; then
-        DEBIAN_FRONTEND=noninteractive apt-get update -qq
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends python3
+        DEBIAN_FRONTEND=noninteractive apt-get update -qq >&2
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+          --no-install-recommends python3 >&2
       fi
       command -v python3 >/dev/null || {
         echo "Для IDN-домена нужен python3 — установите его или задайте имя в punycode" >&2
@@ -37,6 +40,16 @@ to_punycode() {
 }
 MAIL_FQDN="$(to_punycode "$MAIL_FQDN_INPUT")"
 MAIL_DOMAIN="$(to_punycode "$MAIL_DOMAIN_INPUT")"
+# Дальше имя уходит в hostnamectl, /etc/hosts, конфиг nginx и certbot: если в
+# него что-то затесалось, отказ здесь понятнее, чем поломка на третьем шаге.
+for name in "$MAIL_FQDN" "$MAIL_DOMAIN"; do
+  case "$name" in
+    *[!a-zA-Z0-9.-]* | "" | .* | *.)
+      echo "Не похоже на имя хоста: '$name'" >&2
+      echo "Проверьте MAIL_FQDN и MAIL_DOMAIN." >&2
+      exit 1 ;;
+  esac
+done
 if [ "$MAIL_FQDN" != "$MAIL_FQDN_INPUT" ]; then
   echo "IDN-домен: $MAIL_FQDN_INPUT → $MAIL_FQDN (домен почты: $MAIL_DOMAIN)"
 fi
