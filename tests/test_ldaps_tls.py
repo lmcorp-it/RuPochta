@@ -179,6 +179,9 @@ class LdapsCertificateValidationTests(unittest.TestCase):
         ctx.verify_mode = tls.validate
         for option in tls.ssl_options:
             ctx.options |= option
+        # Тот же пол, что дают ssl_options выше, но выраженный современным
+        # API: через options его не видит ни статический анализ, ни читатель.
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         raw = socket.create_connection(("127.0.0.1", port), timeout=5)
         try:
             # Рукопожатие падает в половине сценариев — сокет закрываем сами,
