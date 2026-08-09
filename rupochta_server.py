@@ -60,7 +60,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 try:
-    from ldap3 import Server, Connection, ALL, SUBTREE, NTLM, SIMPLE
+    from ldap3 import Server, Connection, Tls, ALL, SUBTREE, NTLM, SIMPLE
     from ldap3.core.exceptions import LDAPException
     from ldap3.utils.conv import escape_filter_chars as ldap3_escape_filter_chars
     LDAP_AVAILABLE = True
@@ -239,8 +239,10 @@ class Config:
     ).strip()
     MAILADMIN_SSO_STATE_COOKIE = "jmAdminSSOState"
 
-    # AD LDAP
-    LDAP_SERVERS = [
+    # AD LDAP. Через это соединение уходит пароль пользователя, поэтому
+    # незашифрованный ldap:// не принимается: такие адреса откладываются в
+    # LDAP_SERVERS_REJECTED и на старте о них пишется в лог.
+    _LDAP_SERVERS_RAW = [
         item.strip()
         for item in os.environ.get(
             "MAILADMIN_LDAPS_URLS",
@@ -248,6 +250,15 @@ class Config:
         ).split(",")
         if item.strip()
     ]
+    LDAP_SERVERS = [
+        item for item in _LDAP_SERVERS_RAW if item.lower().startswith("ldaps://")
+    ]
+    LDAP_SERVERS_REJECTED = [
+        item for item in _LDAP_SERVERS_RAW if not item.lower().startswith("ldaps://")
+    ]
+    # Свой корневой сертификат — доменные CA почти никогда не входят в
+    # системный набор. Пусто — доверяем системному набору.
+    LDAP_CA_FILE = os.environ.get("MAILADMIN_LDAPS_CA_FILE", "").strip()
     LDAP_BASE_DN = os.environ.get(
         "MAILADMIN_LDAPS_BASE_DN",
         "DC=corp,DC=local",
@@ -480,6 +491,37 @@ def _mail_runtime_mode() -> str:
 
 def _ldap_bind_available() -> bool:
     return bool(LDAP_AVAILABLE and str(CFG.LDAP_BIND_PASS or '').strip())
+
+
+def _ldap_tls():
+    """Параметры TLS для подключения к контроллеру домена.
+
+    ldap3 по умолчанию создаёт Tls(validate=CERT_NONE), то есть принимает любой
+    сертификат — через это соединение уходит пароль пользователя, поэтому
+    проверка обязательна. Цепочку и срок проверяет OpenSSL, имя хоста — сам
+    ldap3 после рукопожатия (он выставляет check_hostname=False у контекста и
+    сверяет имя отдельно, см. Tls.wrap_socket).
+    """
+    return Tls(
+        validate=ssl.CERT_REQUIRED,
+        ca_certs_file=CFG.LDAP_CA_FILE or None,
+    )
+
+
+def _ldap_server(srv_url: str, **kwargs):
+    """ldap3.Server по URL из конфигурации, всегда с проверяемым TLS."""
+    if not srv_url.lower().startswith("ldaps://"):
+        # Сюда не должно доходить: plaintext отсеивается в конфиге.
+        raise ValueError(f"LDAP without TLS is not allowed: {srv_url}")
+    host_part = srv_url.split("://", 1)[1]
+    host, _, port = host_part.partition(":")
+    return Server(
+        host,
+        port=int(port) if port else 636,
+        use_ssl=True,
+        tls=_ldap_tls(),
+        **kwargs,
+    )
 
 
 def _raise_mail_admin_unavailable() -> None:
@@ -4754,11 +4796,7 @@ def _ldap_bind_and_search(
     last_error: Optional[Exception] = None
     for srv_url in CFG.LDAP_SERVERS:
         try:
-            use_ssl = srv_url.startswith("ldaps://")
-            host_part = srv_url.split("://", 1)[1]
-            host, _, port = host_part.partition(":")
-            srv = Server(host, port=int(port) if port else (636 if use_ssl else 389),
-                         use_ssl=use_ssl, get_info=ALL)
+            srv = _ldap_server(srv_url, get_info=ALL)
             conn = Connection(
                 srv,
                 user=CFG.LDAP_BIND_USER,
@@ -5359,10 +5397,7 @@ def ldap_get_user_displayname(login: str) -> str:
     flt = f"(&(objectClass=user)(sAMAccountName={safe}))"
     for srv_url in CFG.LDAP_SERVERS:
         try:
-            host_part = srv_url.split("://", 1)[1]
-            host, _, port = host_part.partition(":")
-            use_ssl = srv_url.startswith("ldaps://")
-            srv = Server(host, port=int(port) if port else (636 if use_ssl else 389), use_ssl=use_ssl)
+            srv = _ldap_server(srv_url)
             conn = Connection(
                 srv,
                 user=CFG.LDAP_BIND_USER,
@@ -7035,6 +7070,13 @@ def background_worker_loop() -> None:
 
 @app.on_event("startup")
 async def on_startup():
+    if CFG.LDAP_SERVERS_REJECTED:
+        # Пароль пользователя уходит именно по этому соединению, поэтому такие
+        # адреса не используются вовсе, а не «понижаются» молча.
+        log.error(
+            "Ignoring LDAP servers without TLS (%s) — use ldaps:// in MAILADMIN_LDAPS_URLS.",
+            ", ".join(CFG.LDAP_SERVERS_REJECTED),
+        )
     if not _ldap_bind_available():
         log.warning("LDAP bind is unavailable — contact search and LDAP-backed admin checks will stay disabled on this node.")
     if not CFG.INTERNAL_TOKEN:
@@ -16060,11 +16102,7 @@ def _ldap_check_user(username: str, password: str) -> bool:
     user_dn = f"{plain}@corp.local"
     for srv_url in CFG.LDAP_SERVERS:
         try:
-            use_ssl = srv_url.startswith("ldaps://")
-            host_part = srv_url.split("://", 1)[1]
-            host, _, port = host_part.partition(":")
-            srv = Server(host, port=int(port) if port else (636 if use_ssl else 389),
-                         use_ssl=use_ssl, get_info=ALL)
+            srv = _ldap_server(srv_url, get_info=ALL)
             user_conn = Connection(srv, user=user_dn, password=password,
                                    authentication=SIMPLE, auto_bind=True, receive_timeout=8)
             user_conn.unbind()
@@ -16087,11 +16125,7 @@ def _ldap_check_admin(username: str, password: str) -> bool:
     user_dn = f"{plain}@corp.local"
     for srv_url in CFG.LDAP_SERVERS:
         try:
-            use_ssl = srv_url.startswith("ldaps://")
-            host_part = srv_url.split("://", 1)[1]
-            host, _, port = host_part.partition(":")
-            srv = Server(host, port=int(port) if port else (636 if use_ssl else 389),
-                         use_ssl=use_ssl, get_info=ALL)
+            srv = _ldap_server(srv_url, get_info=ALL)
             # Step 1: bind as user (auth check)
             user_conn = Connection(srv, user=user_dn, password=password,
                                    authentication=SIMPLE, auto_bind=True, receive_timeout=8)
