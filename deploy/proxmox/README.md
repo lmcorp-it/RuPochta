@@ -179,7 +179,9 @@ certbot renew --dry-run                        # обновление серти
 **Обновление RuПочты** — повторный `bootstrap.sh` либо вручную:
 
 ```bash
-sudo git -C /opt/rupochta/app pull && sudo systemctl restart rupochta
+# -u rupochta: каталог принадлежит сервисному пользователю, от root git
+# откажется работать с «dubious ownership»
+sudo -u rupochta git -C /opt/rupochta/app pull && sudo systemctl restart rupochta
 ```
 
 **Резервная копия.** Достаточно снапшота VM в PVE плюс регулярного бэкапа
