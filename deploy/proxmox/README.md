@@ -54,8 +54,12 @@ ssh rupochta@192.0.2.10 "sudo MAIL_FQDN=mail.example.com MAIL_DOMAIN=example.com
 `bootstrap.sh` идемпотентен: повторный запуск обновляет конфиги и код, но не
 трогает почту, ящики и уже сгенерированные секреты. Полезные переменные:
 `DMS_VERSION` (по умолчанию `latest` — для продакшена закрепите конкретный
-тег), `RUPOCHTA_REF`, `TZ_NAME`, `SKIP_TLS=1` (поднять без сертификата, если
-домен ещё не делегирован).
+тег), `RUPOCHTA_REF`, `TZ_NAME`, `SKIP_TLS=1`.
+
+`SKIP_TLS=1` — это режим доводки, а не рабочая установка: интерфейс отдаётся по
+HTTP, но почта не работает совсем (приложение ходит в IMAP только по TLS, а
+docker-mailserver поднят без сертификата), и `/ready` будет красным. Делегируйте
+домен и перезапустите `bootstrap.sh` уже без этого флага.
 
 **4. Завести DNS-записи** — готовый список печатает:
 
@@ -72,8 +76,24 @@ MX, SPF, DKIM, DMARC и напоминание про PTR. Пока их нет,
 ssh rupochta@192.0.2.10 "sudo docker exec -ti mailserver setup email add admin@example.com"
 ```
 
-Дальше — `https://mail.example.com`, вход по адресу и паролю ящика; остальные
-ящики и алиасы заводятся в `/admin`.
+Дальше — `https://mail.example.com`, вход по адресу и паролю ящика.
+
+**Про `/admin` без каталога.** Форма входа в админ-панель проверяет учётные
+данные только через LDAP/AD или внешний OIDC (`_ldap_check_admin`,
+`MAILADMIN_SSO_*`): `MAIL_ADMIN_KEY` — ключ для API, браузерного входа он не
+даёт. На установке без каталога панель останется недоступной, и ящики заводятся
+одним из двух способов:
+
+```bash
+docker exec -ti mailserver setup email add user@example.com   # с сервера
+curl -H "X-Admin-Key: $MAIL_ADMIN_KEY" ...                    # через админ-API
+```
+
+Чтобы открыть панель, задайте в `/etc/rupochta/rupochta.env` либо
+`MAILADMIN_LDAPS_*`, либо `MAIL_SSO_ISSUER` с парой client id/secret. Мастер
+«Создать ящик» дополнительно опирается на каталог сотрудников
+(`PROXY_PANEL_URL`) и без него отвечает «нужен точный сотрудник»; само создание
+ящика при `WEBMAIL_LOCAL_MAILSERVER=1` идёт локально, через `docker exec`.
 
 ## Кириллический домен: рупочта.рф
 
@@ -154,7 +174,7 @@ sudo git -C /opt/rupochta/app pull && sudo systemctl restart rupochta
 ```
 
 **Резервная копия.** Достаточно снапшота VM в PVE плюс регулярного бэкапа
-`/srv/mail/mail-data` (письма), `/srv/mail/mail-server/config` (ящики, DKIM,
+`/srv/mail/mail-server/mail-data` (письма), `/srv/mail/mail-server/config` (ящики, DKIM,
 фильтры), `/var/lib/rupochta` (алиасы, привязки) и `/etc/rupochta` (секреты).
 Снимайте бэкап PVE в режиме `snapshot` — контейнер останавливать не требуется.
 

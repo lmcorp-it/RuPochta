@@ -18,6 +18,13 @@ MAIL_DOMAIN_INPUT="${MAIL_DOMAIN:-${MAIL_FQDN_INPUT#*.}}"
 to_punycode() {
   case "$1" in
     *[!\ -~]*)  # есть не-ASCII
+      # Конвертация нужна раньше, чем блок установки пакетов ниже: имя хоста
+      # участвует во всех последующих шагах. В cloud-образе Debian python3 уже
+      # есть (его требует cloud-init), но на урезанном образе — доставим.
+      if ! command -v python3 >/dev/null; then
+        DEBIAN_FRONTEND=noninteractive apt-get update -qq
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends python3
+      fi
       command -v python3 >/dev/null || {
         echo "Для IDN-домена нужен python3 — установите его или задайте имя в punycode" >&2
         exit 1
@@ -167,7 +174,11 @@ install -d -o rupochta -g rupochta -m 0750 "$STATE_DIR" "$APP_ROOT"
 
 if [ -d "$APP_ROOT/app/.git" ]; then
   git -C "$APP_ROOT/app" fetch --depth 1 origin "$RUPOCHTA_REF"
-  git -C "$APP_ROOT/app" checkout -f FETCH_HEAD
+  # -B, а не `checkout FETCH_HEAD`: иначе рабочая копия остаётся в detached HEAD
+  # и обещанное в README `git pull` после первого же обновления перестаёт работать.
+  git -C "$APP_ROOT/app" checkout -B "$RUPOCHTA_REF" FETCH_HEAD
+  git -C "$APP_ROOT/app" branch --set-upstream-to="origin/$RUPOCHTA_REF" \
+    "$RUPOCHTA_REF" >/dev/null 2>&1 || true
 else
   git clone --depth 1 --branch "$RUPOCHTA_REF" "$RUPOCHTA_REPO" "$APP_ROOT/app"
 fi
@@ -200,7 +211,29 @@ systemctl restart rupochta
 # ---------------------------------------------------------------------------
 log "nginx перед RuПочтой"
 if [ "$SKIP_TLS" = "1" ]; then
-  echo "SKIP_TLS=1 — оставляю только HTTP-заглушку, TLS-конфиг не подключаю"
+  # Без сертификата почта не работает совсем: приложение ходит в IMAP только по
+  # TLS (imaplib.IMAP4_SSL), а docker-mailserver поднят без SSL_TYPE. Отдаём
+  # интерфейс по HTTP, чтобы установку можно было довести до конца и увидеть,
+  # но /ready будет красным, пока не выпущен сертификат.
+  cat > /etc/nginx/conf.d/acme-bootstrap.conf <<'EOF'
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    location /.well-known/acme-challenge/ { root /var/www/html; }
+    location / {
+        proxy_pass http://127.0.0.1:18400;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+EOF
+  nginx -t && systemctl reload nginx
+  echo "SKIP_TLS=1 — интерфейс отдаётся по HTTP без сертификата; почта не заработает,"
+  echo "пока домен не делегирован. Делегируйте DNS и перезапустите bootstrap.sh без SKIP_TLS."
 else
   rm -f /etc/nginx/conf.d/acme-bootstrap.conf
   subst "$SCRIPT_DIR/nginx/rupochta.conf" /etc/nginx/conf.d/rupochta.conf

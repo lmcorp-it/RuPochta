@@ -31,7 +31,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
     restart: always
     stop_grace_period: 1m
-    # NET_ADMIN — fail2ban, SYS_PTRACE — supervisord-диагностика в контейнере.
+    # NET_ADMIN нужен fail2ban: он правит iptables внутри контейнера.
     cap_add:
       - NET_ADMIN
     healthcheck:

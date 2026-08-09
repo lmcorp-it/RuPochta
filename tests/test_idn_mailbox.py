@@ -6,6 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SERVER = (ROOT / "rupochta_server.py").read_text(encoding="utf-8")
 ADMIN_JS = (ROOT / "static" / "admin.js").read_text(encoding="utf-8")
+APP_JS = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
 
 # рупочта.рф в punycode: у зоны верхнего уровня в имени есть цифры и дефисы.
 IDN_DOMAIN = "рупочта.рф".encode("idna").decode()
@@ -51,9 +52,26 @@ class IdnMailboxTests(unittest.TestCase):
         self.assertTrue(pattern.search(IDN_MAILBOX))
         self.assertTrue(pattern.search(ASCII_MAILBOX))
 
+    def test_compose_field_accepts_punycode_tld(self):
+        # parseEmailList разбирает адреса в полях «Кому»/«Копия».
+        line = next(item for item in APP_JS.splitlines() if "const match = raw.match(" in item)
+        literal = re.search(r"/(.+)/i\)", line.strip())
+        self.assertIsNotNone(literal, "не нашёл регулярку адреса в app.js")
+        pattern = re.compile(literal.group(1), re.IGNORECASE)
+        self.assertTrue(pattern.search(IDN_MAILBOX))
+        self.assertTrue(pattern.search(ASCII_MAILBOX))
+
     def test_bare_hostname_is_still_rejected(self):
         pattern = _server_pattern("_EMAIL_RE = re.compile(")
         for bad in ("admin@localhost", "admin@", "@example.com", "админ@рупочта.рф"):
+            with self.subTest(bad=bad):
+                self.assertIsNone(pattern.match(bad))
+
+    def test_hyphen_may_not_edge_the_last_label(self):
+        # Расширение под punycode не должно пропускать имена, которые не могут
+        # быть хостом: дефис по краям метки запрещён RFC 1123.
+        pattern = _server_pattern("_EMAIL_RE = re.compile(")
+        for bad in ("user@example.x-", "user@example.-x", "user@example.--"):
             with self.subTest(bad=bad):
                 self.assertIsNone(pattern.match(bad))
 

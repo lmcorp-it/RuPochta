@@ -17,6 +17,14 @@ IPCONFIG="${IPCONFIG:-ip=dhcp}"
 # Кириллическое имя (mail.рупочта.рф) переводим в punycode: имя VM, searchdomain
 # и всё, что попадёт в cloud-init, должно быть ASCII.
 if printf '%s' "$MAIL_FQDN_INPUT" | LC_ALL=C grep -q '[^ -~]'; then
+  # На минимальной установке PVE python3 может отсутствовать — тогда просим
+  # имя сразу в punycode, вместо невнятного «command not found».
+  command -v python3 >/dev/null || {
+    echo "Для кириллического имени нужен python3, которого нет на этом хосте." >&2
+    echo "Поставьте его (apt install python3) или задайте MAIL_FQDN в punycode," >&2
+    echo "например MAIL_FQDN=mail.xn--80a1acdmd4a.xn--p1ai" >&2
+    exit 1
+  }
   MAIL_FQDN="$(printf '%s' "$MAIL_FQDN_INPUT" | python3 -c \
     'import sys; print(sys.stdin.read().strip().encode("idna").decode())')"
   echo "IDN-домен: $MAIL_FQDN_INPUT → $MAIL_FQDN"
