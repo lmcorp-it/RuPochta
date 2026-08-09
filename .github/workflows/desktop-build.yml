@@ -39,8 +39,9 @@ jobs:
           if ($env:TAURI_SIGNING_PRIVATE_KEY) {
             npm run tauri build
           } else {
-            Write-Host "No TAURI_SIGNING_PRIVATE_KEY secret — building WITHOUT updater signature"
-            npm run tauri build -- --config '{"bundle":{"createUpdaterArtifacts":false}}'
+            Write-Host "No TAURI_SIGNING_PRIVATE_KEY secret - building WITHOUT updater signature"
+            '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -Path config-ci.json -Encoding UTF8
+            npm run tauri build -- --config config-ci.json
           }
         shell: pwsh
         env:
