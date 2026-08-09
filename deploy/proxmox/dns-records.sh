@@ -22,6 +22,22 @@ MAIL_FQDN="$(to_punycode "$MAIL_FQDN_INPUT")"
 MAIL_DOMAIN="$(to_punycode "$MAIL_DOMAIN_INPUT")"
 DMARC_RUA="${DMARC_RUA:-postmaster@$MAIL_DOMAIN}"
 
+# При отправке через smarthost письма уходят с чужих адресов, и «v=spf1 mx -all»
+# заворачивает собственную же почту в SPF-fail. Смотрим, настроен ли релей.
+# `|| true`: при set -o pipefail отсутствующий mailserver.env иначе обрывает скрипт.
+relay_host="$(sed -n 's/^RELAY_HOST=//p' "$MAIL_ROOT/mailserver.env" 2>/dev/null | tail -n1 || true)"
+relay_host="${RELAY_HOST:-$relay_host}"
+if [ -n "$relay_host" ]; then
+  spf_mechanisms="mx include:<spf-домен-релея>"
+  spf_comment="# SPF: отправка идёт через релей $relay_host — подставьте его механизм
+#      вместо <spf-домен-релея> (обычно include:, что именно — смотрите в
+#      документации провайдера). Без этого своя же почта получит SPF-fail."
+else
+  spf_mechanisms="mx"
+  spf_comment="# SPF: отправляет только этот сервер, остальное — отклонять.
+#      Если позже настроите RELAY_HOST — добавьте сюда механизм релея."
+fi
+
 ipv4="$(curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null || echo '<внешний-IPv4>')"
 ipv6="$(curl -6 -fsS --max-time 5 https://api64.ipify.org 2>/dev/null || true)"
 
@@ -45,8 +61,8 @@ cat <<EOF
 # Куда доставлять почту домена
 $MAIL_DOMAIN.          MX 10  $MAIL_FQDN.
 
-# SPF: отправляет только этот сервер, остальное — отклонять
-$MAIL_DOMAIN.          TXT    "v=spf1 mx -all"
+$spf_comment
+$MAIL_DOMAIN.          TXT    "v=spf1 $spf_mechanisms -all"
 
 # DMARC: карантин для несовпадений, отчёты на $DMARC_RUA
 _dmarc.$MAIL_DOMAIN.   TXT    "v=DMARC1; p=quarantine; rua=mailto:$DMARC_RUA; adkim=s; aspf=s"

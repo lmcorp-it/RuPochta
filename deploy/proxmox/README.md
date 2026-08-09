@@ -25,7 +25,9 @@ Proxmox VE
 - Внешний IPv4 с **открытым исходящим 25/tcp** и возможностью прописать
   **PTR-запись** на `mail.example.com`. Без PTR почта будет уходить в спам;
   многие облачные провайдеры 25-й порт блокируют — тогда настраивайте
-  `RELAY_HOST` в `env/mailserver.env.example`.
+  `RELAY_HOST` в `env/mailserver.env.example` — и не забудьте добавить механизм
+  релея в SPF, иначе своя же почта получит SPF-fail (`dns-records.sh` про это
+  напомнит).
 - ~4 ГиБ RAM и 60 ГиБ диска на VM (с ClamAV; без него хватит 2 ГиБ).
 
 ## Установка
@@ -79,24 +81,25 @@ MX, SPF, DKIM, DMARC и напоминание про PTR. Пока их нет,
 **5. Первый ящик и вход:**
 
 ```bash
-ssh rupochta@192.0.2.10 "sudo docker exec -ti mailserver setup email add admin@example.com"
+# -t обязателен: без псевдотерминала docker exec -ti не дойдёт до запроса пароля
+ssh -t rupochta@192.0.2.10 "sudo docker exec -ti mailserver setup email add admin@example.com"
 ```
 
 Дальше — `https://mail.example.com`, вход по адресу и паролю ящика.
 
 **Про `/admin` без каталога.** Форма входа в админ-панель проверяет учётные
-данные только через LDAP/AD или внешний OIDC (`_ldap_check_admin`,
-`MAILADMIN_SSO_*`): `MAIL_ADMIN_KEY` — ключ для API, браузерного входа он не
-даёт. На установке без каталога панель останется недоступной, и ящики заводятся
-одним из двух способов:
+данные **только через LDAP/AD** (`_ldap_check_admin`). `MAIL_ADMIN_KEY` — ключ
+для API, браузерного входа он не даёт, а маршруты админского OIDC
+(`/admin/sso/login`, `/admin/sso/callback`) в текущем коде отдают 404. На
+установке без каталога панель останется недоступной, и ящики заводятся с
+сервера:
 
 ```bash
-docker exec -ti mailserver setup email add user@example.com   # с сервера
-curl -H "X-Admin-Key: $MAIL_ADMIN_KEY" ...                    # через админ-API
+sudo docker exec -ti mailserver setup email add user@example.com
 ```
 
-Чтобы открыть панель, задайте в `/etc/rupochta/rupochta.env` либо
-`MAILADMIN_LDAPS_*`, либо `MAIL_SSO_ISSUER` с парой client id/secret. Мастер
+Чтобы открыть панель, задайте в `/etc/rupochta/rupochta.env` группу
+`MAILADMIN_LDAPS_*`. Мастер
 «Создать ящик» дополнительно опирается на каталог сотрудников
 (`PROXY_PANEL_URL`) и без него отвечает «нужен точный сотрудник»; само создание
 ящика при `WEBMAIL_LOCAL_MAILSERVER=1` идёт локально, через `docker exec`.

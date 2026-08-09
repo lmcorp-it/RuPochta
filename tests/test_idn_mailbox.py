@@ -34,15 +34,27 @@ class IdnMailboxTests(unittest.TestCase):
         self.assertTrue(pattern.match(ASCII_MAILBOX))
 
     def test_punycode_tld_survives_account_parsing(self):
-        # `setup email list` и разбор postfix-accounts.cf — два отдельных места.
-        for anchor in (
-            r"([a-z0-9][a-z0-9._+\-]*@",
-            r"[a-z0-9][a-z0-9._+\-]*@",
-        ):
-            pattern = _server_pattern(anchor)
-            with self.subTest(anchor=anchor):
-                self.assertTrue(pattern.search(IDN_MAILBOX))
-                self.assertTrue(pattern.search(ASCII_MAILBOX))
+        # `setup email list` и разбор postfix-accounts.cf — два отдельных места
+        # с почти одинаковыми регулярками. Достаём оба литерала разом, иначе
+        # поиск по якорю-подстроке дважды находит первый и вторая ветка
+        # остаётся непокрытой.
+        literals = re.findall(
+            r'r"(\(?\[a-z0-9\]\[a-z0-9\._\+\\-\]\*@[^"]+)"',
+            SERVER,
+        )
+        self.assertEqual(
+            len(literals), 2,
+            "ожидались ровно две регулярки разбора учёток, найдено: "
+            f"{len(literals)}",
+        )
+        for literal in literals:
+            pattern = re.compile(literal.strip("()"))
+            with self.subTest(literal=literal):
+                # Именно fullmatch: search нашёл бы `.xn` внутри адреса и
+                # прошёл бы даже со старым шаблоном TLD из одних букв.
+                self.assertTrue(pattern.fullmatch(IDN_MAILBOX))
+                self.assertTrue(pattern.fullmatch(ASCII_MAILBOX))
+                self.assertIsNone(pattern.fullmatch("user@example.x-"))
 
     def test_admin_ui_accepts_punycode_tld(self):
         line = next(item for item in ADMIN_JS.splitlines() if "const emailMatch = raw.match(" in item)
