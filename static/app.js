@@ -4029,7 +4029,8 @@ function parseEmailList(value) {
     .map((item) => {
       const raw = item.trim();
       if (!raw) return "";
-      const match = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+      // TLD с цифрами и дефисами внутри: IDN-домены приходят в punycode.
+      const match = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z0-9][A-Z0-9-]*[A-Z0-9]/i);
       return match ? match[0] : (raw.includes("@") ? raw : "");
     })
     .filter(Boolean);

@@ -140,6 +140,24 @@ docker run -p 18400:18400 -v rupochta-data:/data \
   -e MAIL_ADMIN_KEY=*** -e WEBMAIL_SECRET_KEY=*** rupochta
 ```
 
+### Proxmox VE
+
+Готовый почтовый сервер «под ключ» в отдельной виртуальной машине PVE:
+docker-mailserver (Postfix, Dovecot, Rspamd), сертификат Let's Encrypt, nginx и
+RuПочта, настроенные так, что админ-панель сразу заводит ящики.
+
+```bash
+# на хосте Proxmox
+VMID=210 MAIL_FQDN=mail.example.com IPCONFIG='ip=192.0.2.10/24,gw=192.0.2.1' \
+  deploy/proxmox/provision-vm.sh
+```
+
+Кириллические домены поддерживаются: `MAIL_FQDN=mail.рупочта.рф` скрипты сами
+переводят в punycode.
+
+Дальше — по [deploy/proxmox/README.md](deploy/proxmox/README.md): установка
+внутри VM, DNS-записи (MX, SPF, DKIM, DMARC, PTR) и эксплуатация.
+
 ### Разработка за 5 минут
 
 Локальный стенд с [Greenmail](https://greenmail-mail-test.github.io/greenmail/) —

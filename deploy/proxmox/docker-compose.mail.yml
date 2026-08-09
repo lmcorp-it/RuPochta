@@ -1,0 +1,50 @@
+# Почтовый сервер для RuПочты: Postfix + Dovecot + Rspamd в одном контейнере
+# (docker-mailserver). Разворачивается в /srv/mail/mail-server внутри VM,
+# созданной provision-vm.sh.
+#
+# Имя контейнера и путь к конфигу совпадают с дефолтами rupochta_server.py
+# (MAILSERVER_CONTAINER=mailserver,
+#  MAILSERVER_ACCOUNTS_FILE=/srv/mail/mail-server/config/postfix-accounts.cf),
+# поэтому админ-панель заводит ящики без дополнительной настройки.
+
+services:
+  mailserver:
+    # Образ закреплён по digest (см. DMS_IMAGE в .env): контейнер получает
+    # NET_ADMIN и обрабатывает всю почту, поэтому подменяемый тег вроде latest
+    # здесь неуместен.
+    image: ${DMS_IMAGE:?DMS_IMAGE не задан — его пишет bootstrap.sh в .env}
+    container_name: mailserver
+    hostname: ${MAIL_FQDN:?MAIL_FQDN не задан}
+    env_file: ./mailserver.env
+    # Docker публикует порты в обход ufw (правила пишутся в nat/DOCKER-USER,
+    # а не в INPUT), поэтому доступность наружу определяется именно этим
+    # списком: всё лишнее прибито к петле.
+    ports:
+      - "25:25"           # SMTP  (входящая почта от других серверов)
+      - "465:465"         # SMTPS (implicit TLS, для клиентов)
+      - "587:587"         # SMTP  (submission, STARTTLS)
+      - "993:993"         # IMAPS
+      - "127.0.0.1:143:143"  # IMAP без TLS — только локальная диагностика
+    volumes:
+      - ./config/:/tmp/docker-mailserver/
+      - ./mail-data/:/var/mail/
+      - ./mail-state/:/var/mail-state/
+      - ./mail-logs/:/var/log/mail/
+      - /etc/letsencrypt/:/etc/letsencrypt/:ro
+      - /etc/localtime:/etc/localtime:ro
+    restart: always
+    stop_grace_period: 1m
+    # NET_ADMIN нужен fail2ban: он правит iptables внутри контейнера.
+    cap_add:
+      - NET_ADMIN
+    healthcheck:
+      test: "ss --listening --tcp | grep -P 'LISTEN.+:smtp' || exit 1"
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
