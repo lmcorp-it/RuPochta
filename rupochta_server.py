@@ -490,7 +490,15 @@ def _mail_runtime_mode() -> str:
 
 
 def _ldap_bind_available() -> bool:
-    return bool(LDAP_AVAILABLE and str(CFG.LDAP_BIND_PASS or '').strip())
+    # Список серверов входит в условие: после отсева plaintext он может стать
+    # пустым, и тогда каталог не работает, хотя пароль бинда задан. Без этой
+    # проверки настройки отрапортовали бы «сконфигурировано», а циклы по
+    # CFG.LDAP_SERVERS просто не выполнялись бы.
+    return bool(
+        LDAP_AVAILABLE
+        and str(CFG.LDAP_BIND_PASS or '').strip()
+        and CFG.LDAP_SERVERS
+    )
 
 
 def _ldap_tls():
@@ -505,19 +513,35 @@ def _ldap_tls():
     return Tls(
         validate=ssl.CERT_REQUIRED,
         ca_certs_file=CFG.LDAP_CA_FILE or None,
+        # Нижняя граница версии протокола задаётся явно: у контекста по
+        # умолчанию minimum_version = MINIMUM_SUPPORTED, то есть решение отдано
+        # системной политике OpenSSL, а TLS 1.0/1.1 для переноса пароля не
+        # годятся. Все поддерживаемые версии AD умеют 1.2.
+        # OP_NO_TLSv1* формально устарели в пользу minimum_version, но ldap3
+        # отдаёт наружу только ssl_options — другого рычага здесь нет.
+        ssl_options=[ssl.OP_NO_TLSv1, ssl.OP_NO_TLSv1_1],
     )
 
 
 def _ldap_server(srv_url: str, **kwargs):
-    """ldap3.Server по URL из конфигурации, всегда с проверяемым TLS."""
-    if not srv_url.lower().startswith("ldaps://"):
+    """ldap3.Server по URL из конфигурации, всегда с проверяемым TLS.
+
+    Разбор через urlparse, а не split: адрес может быть IPv6 в скобках
+    (ldaps://[2001:db8::1]:636) или иметь хвост после хоста.
+    """
+    parsed = urllib.parse.urlparse(srv_url.strip())
+    if parsed.scheme.lower() != "ldaps":
         # Сюда не должно доходить: plaintext отсеивается в конфиге.
-        raise ValueError(f"LDAP without TLS is not allowed: {srv_url}")
-    host_part = srv_url.split("://", 1)[1]
-    host, _, port = host_part.partition(":")
+        raise ValueError("LDAP without TLS is not allowed")
+    try:
+        host, port = parsed.hostname, parsed.port
+    except ValueError as exc:  # нечисловой порт
+        raise ValueError(f"Malformed LDAP URL: {exc}") from None
+    if not host:
+        raise ValueError("LDAP URL without a host")
     return Server(
         host,
-        port=int(port) if port else 636,
+        port=port or 636,
         use_ssl=True,
         tls=_ldap_tls(),
         **kwargs,
@@ -7073,9 +7097,11 @@ async def on_startup():
     if CFG.LDAP_SERVERS_REJECTED:
         # Пароль пользователя уходит именно по этому соединению, поэтому такие
         # адреса не используются вовсе, а не «понижаются» молча.
+        # Адреса не печатаем: это рабочие имена контроллеров домена.
         log.error(
-            "Ignoring LDAP servers without TLS (%s) — use ldaps:// in MAILADMIN_LDAPS_URLS.",
-            ", ".join(CFG.LDAP_SERVERS_REJECTED),
+            "Ignoring %d LDAP server(s) configured without TLS — "
+            "use ldaps:// in MAILADMIN_LDAPS_URLS.",
+            len(CFG.LDAP_SERVERS_REJECTED),
         )
     if not _ldap_bind_available():
         log.warning("LDAP bind is unavailable — contact search and LDAP-backed admin checks will stay disabled on this node.")
