@@ -1,0 +1,38 @@
+[Unit]
+Description=RuПочта — веб-интерфейс и админ-панель поверх IMAP/SMTP
+Documentation=https://github.com/lmcorp-it/RuPochta
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=exec
+User=rupochta
+Group=rupochta
+# Админ-панель заводит ящики через `docker exec mailserver`.
+SupplementaryGroups=docker
+WorkingDirectory=/opt/rupochta/app
+EnvironmentFile=/etc/rupochta/rupochta.env
+ExecStart=/opt/rupochta/venv/bin/python -m uvicorn rupochta_server:app \
+    --host 127.0.0.1 --port 18400 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+
+# Изоляция. На запись нужен только каталог состояния: там же лежит файл
+# блокировки, которым сериализуются правки postfix-accounts.cf
+# (MAILSERVER_ACCOUNT_LOCK_PATH в rupochta.env).
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/rupochta
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
