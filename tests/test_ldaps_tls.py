@@ -4,6 +4,7 @@
 проверяют, что подделка не проходит (issue #39)."""
 
 from pathlib import Path
+import ast
 import shutil
 import socket
 import ssl
@@ -25,13 +26,18 @@ except Exception:  # pragma: no cover
     LDAPCertificateError = Exception
 
 
-def _openssl_usable() -> bool:
-    if not shutil.which("openssl"):
+def _openssl_present() -> bool:
+    return bool(shutil.which("openssl"))
+
+
+def _supports_not_after() -> bool:
+    """`-not_after` появился только в OpenSSL 3.5. На более старых сборках
+    просроченный сертификат выписывается через `openssl ca` (см. _expired_cert)."""
+    if not _openssl_present():
         return False
-    help_text = subprocess.run(
-        ["openssl", "req", "-help"], capture_output=True, text=True
-    ).stderr
-    return "-not_after" in help_text
+    done = subprocess.run(["openssl", "req", "-help"], capture_output=True, text=True)
+    # На части сборок справка уходит в stdout, на части — в stderr.
+    return "-not_after" in (done.stdout + done.stderr)
 
 
 def _run(*args: str) -> None:
@@ -44,8 +50,8 @@ class LdapsCertificateValidationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if not (LDAP3_PRESENT and _openssl_usable()):
-            raise unittest.SkipTest("нужны ldap3 и openssl с -not_after")
+        if not (LDAP3_PRESENT and _openssl_present()):
+            raise unittest.SkipTest("нужны ldap3 и openssl")
         cls.tmp = tempfile.mkdtemp(prefix="ldaps-tls-")
         d = Path(cls.tmp)
         cls.ca_cert = str(d / "ca.pem")
@@ -72,9 +78,7 @@ class LdapsCertificateValidationTests(unittest.TestCase):
 
         cls.good = leaf("good", "localhost", "-days", "2")
         cls.wrong_name = leaf("wrong", "not-the-server.example", "-days", "2")
-        cls.expired = leaf("expired", "localhost",
-                           "-not_before", "20200101000000Z",
-                           "-not_after", "20200102000000Z")
+        cls.expired = cls._expired_cert(d, ca_key)
 
         # Самоподписанный: подписан сам собой, а не тестовым CA.
         self_key = str(d / "self.key")
@@ -83,6 +87,53 @@ class LdapsCertificateValidationTests(unittest.TestCase):
              "-keyout", self_key, "-out", self_crt, "-days", "2",
              "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost")
         cls.self_signed = (self_crt, self_key)
+
+    @classmethod
+    def _expired_cert(cls, d: Path, ca_key: str) -> tuple:
+        """Сертификат с прошедшим сроком.
+
+        В OpenSSL 3.5 хватает `-not_after`; на 3.0, который стоит на раннерах
+        CI, такой опции нет, и дата задаётся через `openssl ca -enddate`. Без
+        запасного пути весь класс тестов молча пропускался бы именно там, где
+        он и должен работать.
+        """
+        key = str(d / "expired.key")
+        csr = str(d / "expired.csr")
+        crt = str(d / "expired.pem")
+        ext = str(_ext_file(d, "expired", "localhost"))
+        _run("openssl", "req", "-newkey", "rsa:2048", "-nodes",
+             "-keyout", key, "-out", csr, "-subj", "/CN=localhost")
+        if _supports_not_after():
+            _run("openssl", "x509", "-req", "-in", csr, "-CA", cls.ca_cert,
+                 "-CAkey", ca_key, "-out", crt, "-extfile", ext,
+                 "-not_before", "20200101000000Z",
+                 "-not_after", "20200102000000Z")
+            return crt, key
+
+        ca_dir = d / "ca-db"
+        (ca_dir / "newcerts").mkdir(parents=True)
+        (ca_dir / "index.txt").write_text("", encoding="utf-8")
+        (ca_dir / "serial").write_text("01\n", encoding="utf-8")
+        conf = d / "ca.conf"
+        conf.write_text(
+            "[ca]\ndefault_ca = CA_default\n\n"
+            "[CA_default]\n"
+            f"dir = {ca_dir}\n"
+            "database = $dir/index.txt\n"
+            "new_certs_dir = $dir/newcerts\n"
+            "serial = $dir/serial\n"
+            "default_md = sha256\n"
+            "policy = policy_any\n"
+            "email_in_dn = no\n"
+            "unique_subject = no\n\n"
+            "[policy_any]\ncommonName = supplied\n",
+            encoding="utf-8",
+        )
+        _run("openssl", "ca", "-batch", "-config", str(conf),
+             "-cert", cls.ca_cert, "-keyfile", ca_key,
+             "-in", csr, "-out", crt, "-extfile", ext,
+             "-startdate", "20200101000000Z", "-enddate", "20200102000000Z")
+        return crt, key
 
     @classmethod
     def tearDownClass(cls):
@@ -126,8 +177,19 @@ class LdapsCertificateValidationTests(unittest.TestCase):
         ctx = ssl.create_default_context(cafile=tls.ca_certs_file)
         ctx.check_hostname = False
         ctx.verify_mode = tls.validate
+        for option in tls.ssl_options:
+            ctx.options |= option
+        # Тот же пол, что дают ssl_options выше, но выраженный современным
+        # API: через options его не видит ни статический анализ, ни читатель.
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         raw = socket.create_connection(("127.0.0.1", port), timeout=5)
-        wrapped = ctx.wrap_socket(raw, server_side=False)
+        try:
+            # Рукопожатие падает в половине сценариев — сокет закрываем сами,
+            # иначе негативные тесты текут дескрипторами.
+            wrapped = ctx.wrap_socket(raw, server_side=False)
+        except Exception:
+            raw.close()
+            raise
         try:
             ldap3_check_hostname(wrapped, server_name, None)
         finally:
@@ -172,9 +234,43 @@ class LdapConfigurationTests(unittest.TestCase):
     """Конфигурация не должна оставлять способ подключиться без TLS."""
 
     def test_every_server_goes_through_the_verified_helper(self):
-        # Прямой ldap3.Server в обход _ldap_server снова принесёт CERT_NONE.
-        self.assertNotIn("= Server(", SERVER_SRC)
-        self.assertIn("def _ldap_server(", SERVER_SRC)
+        """Прямой ldap3.Server в обход помощника снова принесёт CERT_NONE.
+
+        Разбираем AST, а не ищем подстроку: поиск по тексту ломается о пробелы
+        и не отличает вызов внутри помощника от вызова где угодно ещё.
+        """
+        tree = ast.parse(SERVER_SRC)
+        # Обходим всё дерево и запоминаем ближайшую функцию для каждого узла:
+        # если начинать с определений функций, вызов на уровне модуля
+        # (LDAP_SERVER = Server(...)) в проверку не попадёт.
+        enclosing = {}
+
+        def mark(node, fn):
+            for child in ast.iter_child_nodes(node):
+                inner_fn = (
+                    child.name
+                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    else fn
+                )
+                enclosing[child] = inner_fn
+                mark(child, inner_fn)
+
+        mark(tree, None)
+        outside = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = getattr(func, "id", None) or getattr(func, "attr", None)
+            if name != "Server":
+                continue
+            where = enclosing.get(node)
+            if where != "_ldap_server":
+                outside.append(f"{where or '<уровень модуля>'}:{node.lineno}")
+        self.assertEqual(
+            outside, [],
+            f"ldap3.Server создаётся в обход _ldap_server: {outside}",
+        )
 
     def test_plaintext_urls_are_dropped(self):
         import rupochta_server as rs
@@ -191,8 +287,48 @@ class LdapConfigurationTests(unittest.TestCase):
     def test_helper_refuses_plaintext_url(self):
         import rupochta_server as rs
 
-        with self.assertRaises(ValueError):
-            rs._ldap_server("ldap://dc.corp.local")
+        for bad in ("ldap://dc.corp.local", "ldaps://", "ldaps://dc:notaport"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                rs._ldap_server(bad)
+
+    def test_url_forms_are_parsed(self):
+        """Адрес может быть IPv6 в скобках или с хвостом после хоста —
+        split(':') на таких формах разъезжается."""
+        import rupochta_server as rs
+
+        cases = {
+            "ldaps://dc1.corp.local": ("dc1.corp.local", 636),
+            "ldaps://dc1.corp.local:1636": ("dc1.corp.local", 1636),
+            "ldaps://[2001:db8::1]:636": ("2001:db8::1", 636),
+            "ldaps://dc1.corp.local:636/": ("dc1.corp.local", 636),
+        }
+        for url, (host, port) in cases.items():
+            with self.subTest(url=url):
+                srv = rs._ldap_server(url)
+                self.assertEqual((srv.host, srv.port), (host, port))
+                self.assertTrue(srv.ssl)
+
+    def test_ldap_is_unavailable_without_accepted_servers(self):
+        """Пароль бинда есть, но все адреса были plaintext — каталог не
+        работает, и настройки не должны сообщать обратное."""
+        import rupochta_server as rs
+
+        saved = (rs.CFG.LDAP_SERVERS, rs.CFG.LDAP_BIND_PASS)
+        try:
+            rs.CFG.LDAP_BIND_PASS = "секрет"
+            rs.CFG.LDAP_SERVERS = []
+            self.assertFalse(rs._ldap_bind_available())
+            rs.CFG.LDAP_SERVERS = ["ldaps://dc1.corp.local"]
+            self.assertEqual(rs._ldap_bind_available(), rs.LDAP_AVAILABLE)
+        finally:
+            rs.CFG.LDAP_SERVERS, rs.CFG.LDAP_BIND_PASS = saved
+
+    def test_tls_floor_excludes_obsolete_versions(self):
+        import rupochta_server as rs
+
+        options = rs._ldap_tls().ssl_options
+        self.assertIn(ssl.OP_NO_TLSv1, options)
+        self.assertIn(ssl.OP_NO_TLSv1_1, options)
 
 
 def _ext_file(directory: Path, name: str, cn: str) -> Path:
