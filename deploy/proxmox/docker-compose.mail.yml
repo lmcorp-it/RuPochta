@@ -9,7 +9,10 @@
 
 services:
   mailserver:
-    image: ghcr.io/docker-mailserver/docker-mailserver:${DMS_VERSION:-latest}
+    # Образ закреплён по digest (см. DMS_IMAGE в .env): контейнер получает
+    # NET_ADMIN и обрабатывает всю почту, поэтому подменяемый тег вроде latest
+    # здесь неуместен.
+    image: ${DMS_IMAGE:?DMS_IMAGE не задан — его пишет bootstrap.sh в .env}
     container_name: mailserver
     hostname: ${MAIL_FQDN:?MAIL_FQDN не задан}
     env_file: ./mailserver.env

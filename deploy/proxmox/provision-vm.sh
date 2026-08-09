@@ -52,13 +52,44 @@ if qm status "$VMID" >/dev/null 2>&1; then
 fi
 [ -r "$SSHKEYS" ] || { echo "Файл с публичными SSH-ключами не найден: $SSHKEYS" >&2; exit 1; }
 
-image_path="$IMAGE_CACHE/$(basename "$IMAGE_URL")"
+image_name="$(basename "$IMAGE_URL")"
+image_path="$IMAGE_CACHE/$image_name"
 mkdir -p "$IMAGE_CACHE"
 if [ ! -s "$image_path" ]; then
   echo "==> Скачиваю образ Debian: $IMAGE_URL"
   curl -fL --retry 3 -o "$image_path.part" "$IMAGE_URL"
   mv "$image_path.part" "$image_path"
 fi
+
+# Образ становится корневой файловой системой почтового сервера, а ссылка ведёт
+# в мутабельный каталог /latest/. Сверяем контрольную сумму — в том числе для
+# файла из кеша, который мог быть подменён между запусками.
+#
+# Отдельной подписи Debian в этих каталогах не публикует (рядом с образами
+# лежит только SHA512SUMS), поэтому подлинность держится на TLS до
+# cloud.debian.org. Кому этого мало — передайте выверенную сумму в IMAGE_SHA512,
+# тогда скрипт сверится с ней и в сеть за списком не пойдёт.
+echo "==> Проверяю контрольную сумму образа"
+if [ -n "${IMAGE_SHA512:-}" ]; then
+  sum_line="$IMAGE_SHA512  $image_name"
+else
+  sums_file="$(mktemp)"
+  trap 'rm -f "$sums_file"' EXIT
+  curl -fL --retry 3 -o "$sums_file" "${IMAGE_URL%/*}/SHA512SUMS"
+  # Строку достаём отдельно: пустой вход sha512sum молча принял бы за «нечего
+  # проверять», и несовпадение имени файла прошло бы незамеченным.
+  sum_line="$(grep -E "[[:space:]]\*?${image_name}\$" "$sums_file" || true)"
+  if [ -z "$sum_line" ]; then
+    echo "В SHA512SUMS нет строки для $image_name — проверить образ нечем." >&2
+    exit 1
+  fi
+fi
+if ! printf '%s\n' "$sum_line" | (cd "$IMAGE_CACHE" && sha512sum -c --status -); then
+  echo "Контрольная сумма образа не совпала с SHA512SUMS — образ повреждён или подменён." >&2
+  echo "Удалите $image_path и запустите скрипт заново." >&2
+  exit 1
+fi
+echo "    сумма совпала: $image_name"
 
 net0="virtio,bridge=$BRIDGE"
 [ -n "$VLAN" ] && net0="$net0,tag=$VLAN"

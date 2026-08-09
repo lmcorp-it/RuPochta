@@ -44,7 +44,11 @@ fi
 ACME_EMAIL="${ACME_EMAIL:-postmaster@$MAIL_DOMAIN}"
 RUPOCHTA_REPO="${RUPOCHTA_REPO:-https://github.com/lmcorp-it/RuPochta.git}"
 RUPOCHTA_REF="${RUPOCHTA_REF:-main}"
-DMS_VERSION="${DMS_VERSION:-latest}"
+# docker-mailserver 15.1.0, закреплён по digest: тег можно переписать в
+# реестре, digest — нет. Обновление: сверьте новый релиз на
+# github.com/docker-mailserver/docker-mailserver/releases и подставьте его
+# digest (docker buildx imagetools inspect ghcr.io/...:<тег>).
+DMS_IMAGE="${DMS_IMAGE:-ghcr.io/docker-mailserver/docker-mailserver@sha256:af51b15dd3fc72153c0e90eb7692bb5e3a463212d87959a80fa7aa89b617d44a}"
 TZ_NAME="${TZ_NAME:-Europe/Moscow}"
 SKIP_TLS="${SKIP_TLS:-0}"           # 1 — пропустить выпуск сертификата (нет DNS/наружного 80)
 
@@ -140,7 +144,7 @@ subst "$SCRIPT_DIR/env/mailserver.env.example" "$MAIL_ROOT/mailserver.env"
 cp "$SCRIPT_DIR/docker-compose.mail.yml" "$MAIL_ROOT/compose.yml"
 cat > "$MAIL_ROOT/.env" <<EOF
 MAIL_FQDN=$MAIL_FQDN
-DMS_VERSION=$DMS_VERSION
+DMS_IMAGE=$DMS_IMAGE
 EOF
 if [ "$SKIP_TLS" = "1" ]; then
   # Без сертификата DMS не поднимется с SSL_TYPE=letsencrypt.
