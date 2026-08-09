@@ -204,7 +204,16 @@ def shell(api: Proxmox, node: str, vmid: int, script: str, label: str, apply: bo
         for line in script.strip().splitlines():
             print(f"     {line}")
         return True
-    rc, out, err = api.agent_exec(node, vmid, ["/bin/bash", "-lc", script])
+    # `-c`, not `-lc`: a login shell sources /etc/profile and the service
+    # user's profile, and anything in there that blocks hangs this exec — which
+    # wedges the guest agent's single exec channel for every later call, so the
+    # next run cannot even ping it. Set PATH explicitly instead of inheriting
+    # whatever a profile would have exported.
+    script = (
+        "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n"
+        + script
+    )
+    rc, out, err = api.agent_exec(node, vmid, ["/bin/bash", "-c", script])
     for stream in (out, err):
         for line in stream.strip().splitlines()[-40:]:
             print(f"   {line}")
