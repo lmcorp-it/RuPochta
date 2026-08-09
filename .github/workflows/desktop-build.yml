@@ -34,13 +34,21 @@ jobs:
       - name: Install JS deps (tauri cli)
         run: npm install
 
-      - name: Build + sign bundles (NSIS + MSI)
-        run: npm run tauri build
+      - name: Build bundles (NSIS + MSI)
+        run: |
+          if ($env:TAURI_SIGNING_PRIVATE_KEY) {
+            npm run tauri build
+          } else {
+            Write-Host "No TAURI_SIGNING_PRIVATE_KEY secret — building WITHOUT updater signature"
+            npm run tauri build -- --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          }
+        shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Generate latest.json (updater manifest)
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
         shell: pwsh
         run: |
           $version = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
@@ -73,7 +81,7 @@ jobs:
             rupochta-desktop/src-tauri/target/release/bundle/msi/*.sig
             rupochta-desktop/src-tauri/target/release/rupochta-desktop.exe
             rupochta-desktop/src-tauri/target/release/latest.json
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Publish GitHub Release (draft)
         if: startsWith(github.ref, 'refs/tags/')
