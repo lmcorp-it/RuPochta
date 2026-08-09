@@ -1,0 +1,37 @@
+name: Desktop Build (Tauri)
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Windows exe + msi
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: rupochta-desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build bundles (NSIS + MSI)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: src-tauri
+          tagName: desktop-v__VERSION__
+          releaseName: "RuPochta Desktop v__VERSION__"
+          releaseBody: "Windows-приложение RuPochta (вход, регистрация, рабочее место «Фокус»).\n\n- RuPochta_*_x64-setup.exe — установщик NSIS\n- RuPochta_*_x64_en-US.msi — MSI (WiX)\n- rupochta-desktop.exe — портативный exe\n\nФронтенд: V3-сборка стартовой страницы. Иконка — из 3D-логотипа RuPochta."
+          releaseDraft: true
+          prerelease: false
