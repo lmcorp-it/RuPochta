@@ -1,0 +1,9 @@
+# Rust / Tauri
+/target/
+**/target/
+src-tauri/gen/
+
+# Сборки
+*.exe
+*.msi
+*.zip

@@ -1,0 +1,20 @@
+[package]
+name = "rupochta-desktop"
+version = "0.3.0"
+description = "RuPochta — вход и регистрация (desktop)"
+authors = ["Wibecats"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lib]
+name = "rupochta_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]

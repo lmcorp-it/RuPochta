@@ -1,0 +1,109 @@
+name: Desktop Build (Tauri)
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Windows exe + msi
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: rupochta-desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install JS deps (tauri cli)
+        run: npm install
+
+      - name: Build bundles (NSIS + MSI)
+        run: |
+          if ($env:TAURI_SIGNING_PRIVATE_KEY) {
+            npm run tauri build
+          } else {
+            Write-Host "No TAURI_SIGNING_PRIVATE_KEY secret - building WITHOUT updater signature"
+            '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -Path config-ci.json -Encoding UTF8
+            npm run tauri build -- --config config-ci.json
+          }
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Generate latest.json (updater manifest)
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        shell: pwsh
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $setup = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          $sig = Get-Content "$($setup.FullName).sig" -Raw
+          $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          $tag = "$env:GITHUB_REF_NAME"
+          $manifest = [ordered]@{
+            version = $version
+            notes   = "Обновление RuPochta Desktop"
+            pub_date = $pubDate
+            platforms = [ordered]@{
+              "windows-x86_64" = [ordered]@{
+                signature = $sig
+                url = "https://github.com/lmcorp-it/RuPochta/releases/download/$tag/$($setup.Name)"
+              }
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content src-tauri/target/release/latest.json -Encoding UTF8
+          Write-Host "latest.json generated for $version"
+
+      - name: Upload bundles as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rupochta-desktop-bundles
+          path: |
+            rupochta-desktop/src-tauri/target/release/bundle/nsis/*.exe
+            rupochta-desktop/src-tauri/target/release/bundle/nsis/*.sig
+            rupochta-desktop/src-tauri/target/release/bundle/msi/*.msi
+            rupochta-desktop/src-tauri/target/release/bundle/msi/*.sig
+            rupochta-desktop/src-tauri/target/release/rupochta-desktop.exe
+            rupochta-desktop/src-tauri/target/release/latest.json
+          if-no-files-found: warn
+
+      - name: Publish GitHub Release (draft)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: "RuPochta Desktop ${{ github.ref_name }}"
+          body: |
+            Windows-приложение RuPochta (вход, регистрация, рабочее место «Фокус»).
+
+            - RuPochta_*_x64-setup.exe — установщик NSIS (+ .sig)
+            - RuPochta_*_x64_en-US.msi — MSI (WiX) (+ .sig)
+            - rupochta-desktop.exe — портативный exe
+            - latest.json — манифест автообновлений (Tauri updater)
+
+            Фронтенд: V3-сборка стартовой страницы. Иконка — из 3D-логотипа RuPochta.
+            Автообновления: приложение проверяет latest.json при запуске и раз в час.
+          files: |
+            rupochta-desktop/src-tauri/target/release/bundle/nsis/*.exe
+            rupochta-desktop/src-tauri/target/release/bundle/nsis/*.sig
+            rupochta-desktop/src-tauri/target/release/bundle/msi/*.msi
+            rupochta-desktop/src-tauri/target/release/bundle/msi/*.sig
+            rupochta-desktop/src-tauri/target/release/rupochta-desktop.exe
+            rupochta-desktop/src-tauri/target/release/latest.json

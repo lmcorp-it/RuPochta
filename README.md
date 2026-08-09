@@ -158,6 +158,11 @@ VMID=210 MAIL_FQDN=mail.example.com IPCONFIG='ip=192.0.2.10/24,gw=192.0.2.1' \
 Дальше — по [deploy/proxmox/README.md](deploy/proxmox/README.md): установка
 внутри VM, DNS-записи (MX, SPF, DKIM, DMARC, PTR) и эксплуатация.
 
+> **Два набора скриптов, не перепутайте.** `deploy/proxmox/` — с нуля: создаёт
+> виртуальную машину и ставит в неё почтовый сервер. Корневой `deploy/` —
+> для уже существующей VM: настраивает приложение (nginx, systemd, окружение) и
+> умеет управлять гостем через API Proxmox без SSH.
+
 ### Разработка за 5 минут
 
 Локальный стенд с [Greenmail](https://greenmail-mail-test.github.io/greenmail/) —
@@ -185,7 +190,8 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev up --build
 | `WEBMAIL_DB` | Путь к SQLite-базе состояния |
 | `MAIL_PUBLIC_SIGNUP` | Публичная регистрация: `0` — выкл, `1` — вкл |
 | `MAIL_SSO_ISSUER` · `MAIL_SSO_CLIENT_ID` · `MAIL_SSO_CLIENT_SECRET` | OIDC-вход |
-| `MAILADMIN_LDAPS_URLS` · `MAILADMIN_LDAPS_BASE_DN` | Каталог Active Directory |
+| `MAILADMIN_LDAPS_URLS` · `MAILADMIN_LDAPS_BASE_DN` | Каталог Active Directory (только `ldaps://`) |
+| `MAILADMIN_LDAPS_CA_FILE` | Корневой сертификат доменного CA, если его нет в системном наборе |
 | `MAIL_TICKET_INTAKE_URL` | Приём писем как заявок в helpdesk |
 | `RUPOCHTA_INTERNAL_TOKEN` | Внутренние интеграции |
 
@@ -200,7 +206,8 @@ rupochta_server.py          — ядро: аутентификация, IMAP/SMT
 rupochta_control_agent.py   — агент управления ботом
 imap_docker_proxy.py        — локальный IMAP-прокси
 rupochta-mcp-server/        — MCP-сервер для LLM-агентов (TypeScript)
-deploy/                     — systemd, nginx, скрипты установки
+deploy/                     — установка на живую VM + управление через API Proxmox
+deploy/proxmox/             — создание VM и почтового сервера с нуля
 static/                     — фронтенд (PWA), service worker
 tests/                      — python3 -m unittest discover -s tests
 DESIGN.md · tokens.json     — дизайн-токены
