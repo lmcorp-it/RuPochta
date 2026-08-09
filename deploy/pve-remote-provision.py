@@ -204,7 +204,16 @@ def shell(api: Proxmox, node: str, vmid: int, script: str, label: str, apply: bo
         for line in script.strip().splitlines():
             print(f"     {line}")
         return True
-    rc, out, err = api.agent_exec(node, vmid, ["/bin/bash", "-lc", script])
+    # `-c`, not `-lc`: a login shell sources /etc/profile and the service
+    # user's profile, and anything in there that blocks hangs this exec — which
+    # wedges the guest agent's single exec channel for every later call, so the
+    # next run cannot even ping it. Set PATH explicitly instead of inheriting
+    # whatever a profile would have exported.
+    script = (
+        "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n"
+        + script
+    )
+    rc, out, err = api.agent_exec(node, vmid, ["/bin/bash", "-c", script])
     for stream in (out, err):
         for line in stream.strip().splitlines()[-40:]:
             print(f"   {line}")
@@ -213,6 +222,68 @@ def shell(api: Proxmox, node: str, vmid: int, script: str, label: str, apply: bo
         return False
     print("   ok")
     return True
+
+
+def build_guest_verify_script() -> str:
+    """Build the in-guest health gate used after deployment.
+
+    Endpoint bodies are deliberately discarded: status codes are sufficient
+    for this gate, and response data does not belong in a public Actions log.
+    `/ready` is required because this deploys a mail service, not merely its UI.
+    """
+    return (
+        "set -uo pipefail\n"
+        "failed=0\n"
+        "check_unit() {\n"
+        "  unit=\"$1\"\n"
+        "  state=$(systemctl is-active \"$unit\" 2>/dev/null || true)\n"
+        "  echo \"  $unit -> ${state:-unknown}\"\n"
+        "  [ \"$state\" = active ] || failed=1\n"
+        "}\n"
+        "check_endpoint() {\n"
+        "  path=\"$1\"\n"
+        "  code=$(curl -sS -o /dev/null -w '%%{http_code}' --max-time 10 "
+        "\"http://127.0.0.1:18400$path\" 2>/dev/null || true)\n"
+        "  code=${code:-000}\n"
+        "  echo \"  $path -> $code\"\n"
+        "  [ \"$code\" = 200 ] || failed=1\n"
+        "}\n"
+        "check_unit nginx\n"
+        "check_unit rupochta.service\n"
+        "echo \"  source -> $(git -C %s log --oneline -1 2>&1 || echo unavailable)\"\n"
+        "check_endpoint /health\n"
+        "check_endpoint /ready\n"
+        "check_endpoint /api/signup/config\n"
+        "check_endpoint /signup\n"
+        "nginx_code=$(curl -sS -o /dev/null -w '%%{http_code}' --max-time 10 "
+        "http://127.0.0.1/ 2>/dev/null || true)\n"
+        "nginx_code=${nginx_code:-000}\n"
+        "echo \"  local nginx :80 -> $nginx_code\"\n"
+        "case \"$nginx_code\" in 200|301|302|307|308) ;; *) failed=1 ;; esac\n"
+        # These lines explain the network path without reading unit files,
+        # credentials, endpoint bodies, or other secret-bearing data.
+        "if ip route get 1.1.1.1 >/dev/null 2>&1; then\n"
+        "  echo '  route -> available (addresses redacted)'\n"
+        "else\n"
+        "  echo '  route -> unavailable'\n"
+        "fi\n"
+        "echo \"  cloudflared -> $(systemctl is-active cloudflared 2>&1 || true) "
+        "($(command -v cloudflared || echo 'not installed'))\"\n"
+        "echo \"  cf-config -> $([ -f /etc/cloudflared/config.yml ] "
+        "&& echo /etc/cloudflared/config.yml || echo 'dashboard-managed')\"\n"
+        "for port in 80 443; do\n"
+        "  if ss -ltn 2>/dev/null | grep -Eq \":$port([[:space:]]|$)\"; then\n"
+        "    echo \"  listener :$port -> present\"\n"
+        "  else\n"
+        "    echo \"  listener :$port -> absent\"\n"
+        "  fi\n"
+        "done\n"
+        "if [ \"$failed\" -ne 0 ]; then\n"
+        "  echo 'guest verification failed' >&2\n"
+        "  exit 1\n"
+        "fi\n"
+        "echo 'guest verification passed'\n"
+    ) % CHECKOUT_DIR
 
 
 def main() -> int:
@@ -294,7 +365,12 @@ def main() -> int:
         checkout = (
             f"set -euo pipefail\n"
             f"if [ -d {CHECKOUT_DIR}/.git ]; then\n"
-            f"  git -C {CHECKOUT_DIR} fetch --depth 1 origin {args.branch}\n"
+            # The clone below is --depth 1 --branch, which configures a refspec
+            # for that one branch only. `fetch origin <other branch>` then moves
+            # FETCH_HEAD and nothing else, so origin/<other branch> never exists
+            # and the checkout fails. Name the destination ref explicitly.
+            f"  git -C {CHECKOUT_DIR} fetch --depth 1 origin "
+            f"'+refs/heads/{args.branch}:refs/remotes/origin/{args.branch}'\n"
             f"  git -C {CHECKOUT_DIR} checkout -B {args.branch} origin/{args.branch}\n"
             f"else\n"
             f"  git clone --depth 1 --branch {args.branch} {args.repo} {CHECKOUT_DIR}\n"
@@ -320,13 +396,9 @@ def main() -> int:
             preview = f"set -euo pipefail\ncd {CHECKOUT_DIR}\nbash deploy/purge-lets-mobile-mailboxes.sh"
             shell(api, node, vmid, preview, "lets-mobile mailboxes (listing only)", args.apply)
 
-        verify = (
-            "set -euo pipefail\n"
-            "curl -fsS http://127.0.0.1:18400/health && echo\n"
-            "curl -fsS http://127.0.0.1:18400/api/signup/config && echo\n"
-            "curl -fsS http://127.0.0.1:18400/ready && echo || echo 'ready: mail path not answering yet'"
-        )
-        shell(api, node, vmid, verify, "verifying the service inside the guest", args.apply)
+        verify = build_guest_verify_script()
+        if not shell(api, node, vmid, verify, "verifying the service inside the guest", args.apply):
+            return 1
 
         if not args.apply:
             print("\nDry run only — nothing was changed. Re-run with --apply.")

@@ -77,18 +77,24 @@ fi
 # ----------------------------------------------------------- application
 echo
 echo "application"
+
+# This is deliberately an edge-to-service check. When DNS points at a CDN or
+# tunnel, both HTTP and HTTPS requests hit that public edge; comparing them
+# cannot prove which protocol the private origin serves. The deployment driver
+# performs the separate in-guest origin gate against loopback.
+
 health="$(timeout 10 curl -fsS "$BASE/health" 2>/dev/null)"
 if [ -n "$health" ]; then
   ok "/health $health"
 else
-  bad "/health did not answer — the service is not running"
+  bad "/health did not answer through the public route — the app or edge routing is unavailable"
 fi
 
 ready="$(timeout 15 curl -fsS "$BASE/ready" 2>/dev/null)"
 if [ -n "$ready" ]; then
   ok "/ready $ready"
 else
-  bad "/ready did not answer — IMAP or SMTP is unreachable"
+  bad "/ready did not answer through the public route — mail readiness is unknown"
 fi
 
 signup="$(timeout 10 curl -fsS "$BASE/api/signup/config" 2>/dev/null)"

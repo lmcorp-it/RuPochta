@@ -2,11 +2,16 @@
 # Turn the existing mail VM into the public рупочта.рф service.
 #
 # Idempotent: safe to re-run after fixing a step. It renames the host, installs
-# the application under /opt/rupochta, wires nginx and systemd, and leaves TLS
-# and DNS to the operator — those need the domain to be delegated first.
+# the application under /opt/rupochta and wires nginx and systemd. DNS remains
+# an operator step; TLS can be requested after the domain is delegated.
 #
 #   sudo ./bootstrap-rupochta-rf.sh                 # install, keep host name
 #   sudo ./bootstrap-rupochta-rf.sh --rename        # also rename the host
+#   sudo ./bootstrap-rupochta-rf.sh --tls           # also request the certificate
+#
+# Without a certificate the site is served over plain HTTP, so that nginx comes
+# up at all and the ACME challenge can be answered. Get a certificate as soon
+# as the domain resolves here: --tls does it, or run certbot by hand and re-run.
 #
 # Run it on the mail VM (the one currently answering as mail.lets-mobile.ru),
 # from a checkout of this repository.
@@ -19,15 +24,27 @@ APP_DIR="/opt/rupochta"
 ENV_FILE="/etc/rupochta/rupochta.env"
 STATE_DIR="/var/lib/rupochta"
 SERVICE_USER="rupochta"
+APP_PORT=18400
+CERT_DIR="/etc/letsencrypt/live/$DOMAIN_PUNYCODE"
+SITE_AVAILABLE_DIR="/etc/nginx/sites-available"
+SITE_LINK="/etc/nginx/sites-enabled/rupochta-rf.conf"
+ACME_WEBROOT="/var/www/certbot"
+CERTBOT_DEPLOY_HOOK="/etc/letsencrypt/renewal-hooks/deploy/rupochta-nginx"
 RENAME=0
+OBTAIN_CERT=0
+ACME_EMAIL="${ACME_EMAIL:-}"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=deploy/bootstrap-rupochta-rf-lib.sh
+source "$REPO_DIR/deploy/bootstrap-rupochta-rf-lib.sh"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --rename) RENAME=1 ;;
     --hostname) shift; NEW_HOSTNAME="${1:?--hostname needs a value}"; RENAME=1 ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    --tls) OBTAIN_CERT=1 ;;
+    --acme-email) shift; ACME_EMAIL="${1:?--acme-email needs a value}"; OBTAIN_CERT=1 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -58,7 +75,7 @@ fi
 step "installing system packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq python3-venv python3-pip nginx certbot python3-certbot-nginx git rsync
+apt-get install -y -qq python3-venv python3-pip nginx certbot python3-certbot-nginx dnsutils git rsync
 
 # ------------------------------------------------------------- application
 step "installing the application into $APP_DIR"
@@ -66,7 +83,7 @@ id -u "$SERVICE_USER" >/dev/null 2>&1 || useradd --system --home "$APP_DIR" --sh
 # Provisioning mailboxes shells into the mail container.
 getent group docker >/dev/null 2>&1 && usermod -aG docker "$SERVICE_USER"
 
-mkdir -p "$APP_DIR" "$STATE_DIR" "$(dirname "$ENV_FILE")" /var/www/certbot
+mkdir -p "$APP_DIR" "$STATE_DIR" "$(dirname "$ENV_FILE")" "$ACME_WEBROOT"
 rsync -a --delete \
   --exclude '.git' --exclude '.venv' --exclude 'node_modules' --exclude '*.db' \
   "$REPO_DIR"/ "$APP_DIR"/
@@ -104,44 +121,128 @@ step "installing the nginx front end"
 install -d /etc/nginx/snippets /etc/nginx/conf.d
 install -m 0644 "$REPO_DIR/deploy/nginx/snippets/rupochta-proxy.conf" /etc/nginx/snippets/rupochta-proxy.conf
 install -m 0644 "$REPO_DIR/deploy/nginx/conf.d/rupochta-limits.conf" /etc/nginx/conf.d/rupochta-limits.conf
-install -m 0644 "$REPO_DIR/deploy/nginx/rupochta-rf.conf" /etc/nginx/sites-available/rupochta-rf.conf
-ln -sf /etc/nginx/sites-available/rupochta-rf.conf /etc/nginx/sites-enabled/rupochta-rf.conf
+install -m 0644 "$REPO_DIR/deploy/nginx/rupochta-rf.conf" "$SITE_AVAILABLE_DIR/rupochta-rf.conf"
+install -m 0644 "$REPO_DIR/deploy/nginx/rupochta-rf-bootstrap.conf" "$SITE_AVAILABLE_DIR/rupochta-rf-bootstrap.conf"
 rm -f /etc/nginx/sites-enabled/default
+install_certbot_deploy_hook
 
-if [ ! -d "/etc/letsencrypt/live/$DOMAIN_PUNYCODE" ]; then
-  cat <<EOF
-
-TLS certificate for $DOMAIN_PUNYCODE is not present yet, so nginx will not
-start with this config. Point the DNS at this host, then run:
-
-  certbot certonly --webroot -w /var/www/certbot \\
-    -d $DOMAIN_PUNYCODE -d www.$DOMAIN_PUNYCODE -d mail.$DOMAIN_PUNYCODE
-
-and re-run this script (or just: nginx -t && systemctl reload nginx).
-EOF
-else
-  nginx -t
-  systemctl reload nginx
+# The production config names files under /etc/letsencrypt/live/, so nginx
+# refuses to load it before certbot has run — and a refusing nginx serves
+# nothing at all, including the ACME challenge that would produce the
+# certificate. Serve HTTP only until both certificate files exist, then switch.
+# Always prove the selected config loads.  With explicit --tls, a broken
+# existing certificate is allowed to fall back to the HTTP bootstrap site so
+# ACME can repair it; without --tls, an implicit downgrade fails closed.
+if ! prepare_nginx_site; then
+  echo "could not prepare a valid nginx site" >&2
+  exit 1
 fi
+systemctl enable nginx >/dev/null 2>&1 || true
+systemctl restart nginx
 
 # ------------------------------------------------------------------- start
 step "starting RuPochta"
+
+# An older RuPochta under another unit can keep the port while the new unit
+# appears to restart cleanly. Hand it over only when both the listening process
+# and its unit ExecStart identify rupochta_server:app; generic uvicorn services
+# must fail closed because disabling their owner could stop unrelated apps.
+port_owner_pid() {
+  ss -ltnp 2>/dev/null | awk -v p=":$APP_PORT\$" '$4 ~ p' \
+    | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -1
+}
+unit_of_pid() {   # 0::/system.slice/whatever.service -> whatever.service
+  sed -n 's|.*/\([^/]*\.service\)$|\1|p' "/proc/$1/cgroup" 2>/dev/null | head -1
+}
+
+squatter="$(port_owner_pid || true)"
+if [ -n "${squatter:-}" ]; then
+  squatter_cmd="$(tr '\0' ' ' < "/proc/$squatter/cmdline" 2>/dev/null || true)"
+  owner_unit="$(unit_of_pid "$squatter" || true)"
+
+  if [ "${owner_unit:-}" = "rupochta.service" ]; then
+    :   # our own unit — the restart below replaces it
+  elif [ -z "${owner_unit:-}" ]; then
+    echo "port $APP_PORT is held by pid $squatter and this script will not stop it:" >&2
+    echo "  unit: ${owner_unit:-none (not managed by systemd)}" >&2
+    echo "  cmd:  $squatter_cmd" >&2
+    echo "Only a proven RuPochta systemd unit is taken over automatically." >&2
+    exit 1
+  else
+    echo "port $APP_PORT is held by $owner_unit"
+    echo "  cmd: $squatter_cmd"
+    if take_over_port_owner "$owner_unit" "$squatter_cmd"; then
+      echo "stopped and disabled a proven earlier RuPochta unit"
+    else
+      takeover_status=$?
+      if [ "$takeover_status" -eq 2 ]; then
+        echo "the process or its unit ExecStart is not proven to be RuPochta;" >&2
+        echo "refusing to disable $owner_unit automatically." >&2
+      else
+        echo "$owner_unit is proven to be RuPochta, but systemd could not stop it" >&2
+        echo "(status $takeover_status); refusing to continue with the port occupied." >&2
+      fi
+      exit 1
+    fi
+  fi
+fi
+
 systemctl restart rupochta.service
 sleep 2
-if curl -fsS http://127.0.0.1:18400/health >/dev/null; then
+
+# Type=simple means `systemctl restart` returns as soon as the process is
+# forked, so a unit that dies immediately — most often because something else
+# already holds 18400 — still looks like a clean restart, and the health check
+# below happily answers from whatever is really on that port.
+if ! systemctl is-active --quiet rupochta.service; then
+  echo "rupochta.service is not running after restart:" >&2
+  systemctl --no-pager --lines=20 status rupochta.service >&2 || true
+  ss -ltnp 2>/dev/null | grep ":$APP_PORT" >&2 || true
+  exit 1
+fi
+
+if curl -fsS http://127.0.0.1:$APP_PORT/health >/dev/null; then
   echo "health: ok"
 else
   echo "health check failed — journalctl -u rupochta -n 50" >&2
   exit 1
 fi
-curl -fsS http://127.0.0.1:18400/ready >/dev/null \
+curl -fsS http://127.0.0.1:$APP_PORT/ready >/dev/null \
   && echo "ready:  ok (IMAP and SMTP reachable)" \
   || echo "ready:  NOT ok — the mail path is not answering yet"
 
-cat <<EOF
+# /health has answered for every version this service has ever had, so it
+# cannot tell a fresh deploy from a stale process still holding the port. Ask
+# for a route only current code serves.
+if curl -fsS http://127.0.0.1:$APP_PORT/api/signup/config >/dev/null 2>&1; then
+  echo "signup: /api/signup/config present"
+else
+  echo "signup: /api/signup/config is missing — whatever answers on 18400 is" >&2
+  echo "        not the build just installed. Open registration would 404." >&2
+  ss -ltnp 2>/dev/null | grep ":$APP_PORT" >&2 || true
+  exit 1
+fi
 
-Installed. Remaining manual steps are in docs/deploy-rupochta-rf.md:
+# --------------------------------------------------------------------- TLS
+# Deliberately last: the challenge is served by the nginx started above, which
+# is why this could never have worked from the old ordering.
+if [ "$OBTAIN_CERT" -eq 1 ]; then
+  step "requesting a TLS certificate"
+  if ! request_tls_certificate; then
+    echo "TLS was explicitly requested but could not be installed." >&2
+    exit 1
+  fi
+fi
+
+echo
+if certificate_files_present; then
+  echo "Installed, serving HTTPS from this host."
+else
+  echo "Installed, serving plain HTTP — TLS is still terminated by whatever sits"
+  echo "in front of this host. Re-run with --tls to hold the certificate here."
+fi
+cat <<EOF
+Remaining steps are in docs/deploy-rupochta-rf.md:
   1. DNS for $DOMAIN_PUNYCODE (A, MX, SPF, DKIM, DMARC, PTR)
-  2. TLS certificate (certbot command above)
-  3. verify registration: https://$DOMAIN_PUNYCODE/signup
+  2. verify registration: https://$DOMAIN_PUNYCODE/signup
 EOF

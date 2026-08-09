@@ -33,7 +33,9 @@ on:
       vm:
         description: "Guest vmid, exact name, or unique name fragment"
         required: true
-        default: "mail"
+        # The guest has already been renamed, so the old "mail" no longer
+        # resolves — a dispatch that keeps the defaults must still find it.
+        default: "rupochta-rf"
       new_name:
         description: "New guest name"
         required: true
@@ -96,11 +98,6 @@ jobs:
 
       - name: Verify the public service
         if: inputs.apply
-        continue-on-error: true
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq dnsutils
-          ./deploy/verify-rupochta-rf.sh || {
-            echo "::warning::The service is not fully live yet — see the failed checks above."
-            echo "::warning::DNS delegation and the TLS certificate are done outside this workflow."
-            exit 0
-          }
+          ./deploy/verify-rupochta-rf.sh
