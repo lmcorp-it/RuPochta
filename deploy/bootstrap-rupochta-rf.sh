@@ -2,8 +2,8 @@
 # Turn the existing mail VM into the public рупочта.рф service.
 #
 # Idempotent: safe to re-run after fixing a step. It renames the host, installs
-# the application under /opt/rupochta, wires nginx and systemd, and leaves TLS
-# and DNS to the operator — those need the domain to be delegated first.
+# the application under /opt/rupochta and wires nginx and systemd. DNS remains
+# an operator step; TLS can be requested after the domain is delegated.
 #
 #   sudo ./bootstrap-rupochta-rf.sh                 # install, keep host name
 #   sudo ./bootstrap-rupochta-rf.sh --rename        # also rename the host
@@ -26,11 +26,17 @@ STATE_DIR="/var/lib/rupochta"
 SERVICE_USER="rupochta"
 APP_PORT=18400
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN_PUNYCODE"
+SITE_AVAILABLE_DIR="/etc/nginx/sites-available"
+SITE_LINK="/etc/nginx/sites-enabled/rupochta-rf.conf"
+ACME_WEBROOT="/var/www/certbot"
+CERTBOT_DEPLOY_HOOK="/etc/letsencrypt/renewal-hooks/deploy/rupochta-nginx"
 RENAME=0
 OBTAIN_CERT=0
 ACME_EMAIL="${ACME_EMAIL:-}"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=deploy/bootstrap-rupochta-rf-lib.sh
+source "$REPO_DIR/deploy/bootstrap-rupochta-rf-lib.sh"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -69,7 +75,7 @@ fi
 step "installing system packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq python3-venv python3-pip nginx certbot python3-certbot-nginx git rsync
+apt-get install -y -qq python3-venv python3-pip nginx certbot python3-certbot-nginx dnsutils git rsync
 
 # ------------------------------------------------------------- application
 step "installing the application into $APP_DIR"
@@ -77,7 +83,7 @@ id -u "$SERVICE_USER" >/dev/null 2>&1 || useradd --system --home "$APP_DIR" --sh
 # Provisioning mailboxes shells into the mail container.
 getent group docker >/dev/null 2>&1 && usermod -aG docker "$SERVICE_USER"
 
-mkdir -p "$APP_DIR" "$STATE_DIR" "$(dirname "$ENV_FILE")" /var/www/certbot
+mkdir -p "$APP_DIR" "$STATE_DIR" "$(dirname "$ENV_FILE")" "$ACME_WEBROOT"
 rsync -a --delete \
   --exclude '.git' --exclude '.venv' --exclude 'node_modules' --exclude '*.db' \
   "$REPO_DIR"/ "$APP_DIR"/
@@ -115,42 +121,32 @@ step "installing the nginx front end"
 install -d /etc/nginx/snippets /etc/nginx/conf.d
 install -m 0644 "$REPO_DIR/deploy/nginx/snippets/rupochta-proxy.conf" /etc/nginx/snippets/rupochta-proxy.conf
 install -m 0644 "$REPO_DIR/deploy/nginx/conf.d/rupochta-limits.conf" /etc/nginx/conf.d/rupochta-limits.conf
-install -m 0644 "$REPO_DIR/deploy/nginx/rupochta-rf.conf" /etc/nginx/sites-available/rupochta-rf.conf
-install -m 0644 "$REPO_DIR/deploy/nginx/rupochta-rf-bootstrap.conf" /etc/nginx/sites-available/rupochta-rf-bootstrap.conf
+install -m 0644 "$REPO_DIR/deploy/nginx/rupochta-rf.conf" "$SITE_AVAILABLE_DIR/rupochta-rf.conf"
+install -m 0644 "$REPO_DIR/deploy/nginx/rupochta-rf-bootstrap.conf" "$SITE_AVAILABLE_DIR/rupochta-rf-bootstrap.conf"
 rm -f /etc/nginx/sites-enabled/default
+install_certbot_deploy_hook
 
 # The production config names files under /etc/letsencrypt/live/, so nginx
 # refuses to load it before certbot has run — and a refusing nginx serves
 # nothing at all, including the ACME challenge that would produce the
-# certificate. Serve HTTP only until the certificate exists, then switch.
-enable_site() {
-  ln -sf "/etc/nginx/sites-available/$1" /etc/nginx/sites-enabled/rupochta-rf.conf
-}
-
-if [ -d "$CERT_DIR" ]; then
-  enable_site rupochta-rf.conf
-  echo "certificate present — serving HTTPS"
-else
-  enable_site rupochta-rf-bootstrap.conf
-  echo "no certificate for $DOMAIN_PUNYCODE yet — serving plain HTTP for now."
-  echo "Anything in front of this host must terminate TLS, or mailbox passwords"
-  echo "travel in the clear. Re-run with --tls once the DNS points here."
+# certificate. Serve HTTP only until both certificate files exist, then switch.
+# Always prove the selected config loads.  With explicit --tls, a broken
+# existing certificate is allowed to fall back to the HTTP bootstrap site so
+# ACME can repair it; without --tls, an implicit downgrade fails closed.
+if ! prepare_nginx_site; then
+  echo "could not prepare a valid nginx site" >&2
+  exit 1
 fi
-
-# Always prove the config loads and that nginx is actually up: a front end that
-# fails to start is exactly the failure this script used to report as success.
-nginx -t
 systemctl enable nginx >/dev/null 2>&1 || true
 systemctl restart nginx
 
 # ------------------------------------------------------------------- start
 step "starting RuPochta"
 
-# Anything listening on the application port is, by definition, an older
-# RuPochta — usually an earlier install under a different unit name. uvicorn
-# would exit with "address already in use" while `systemctl restart` still
-# reported success, leaving the stale build serving the public. Hand the port
-# over first, and name what was stopped.
+# An older RuPochta under another unit can keep the port while the new unit
+# appears to restart cleanly. Hand it over only when both the listening process
+# and its unit ExecStart identify rupochta_server:app; generic uvicorn services
+# must fail closed because disabling their owner could stop unrelated apps.
 port_owner_pid() {
   ss -ltnp 2>/dev/null | awk -v p=":$APP_PORT\$" '$4 ~ p' \
     | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -1
@@ -164,27 +160,30 @@ if [ -n "${squatter:-}" ]; then
   squatter_cmd="$(tr '\0' ' ' < "/proc/$squatter/cmdline" 2>/dev/null || true)"
   owner_unit="$(unit_of_pid "$squatter" || true)"
 
-  # Stop only something that is demonstrably another copy of this application.
-  # A container would publish the port through docker-proxy, and disabling
-  # docker.service on this box would take the mail server down with it.
-  case "$squatter_cmd" in
-    *rupochta_server*|*uvicorn*) mine=1 ;;
-    *)                           mine=0 ;;
-  esac
-
   if [ "${owner_unit:-}" = "rupochta.service" ]; then
     :   # our own unit — the restart below replaces it
-  elif [ "$mine" -eq 0 ] || [ -z "${owner_unit:-}" ]; then
+  elif [ -z "${owner_unit:-}" ]; then
     echo "port $APP_PORT is held by pid $squatter and this script will not stop it:" >&2
     echo "  unit: ${owner_unit:-none (not managed by systemd)}" >&2
     echo "  cmd:  $squatter_cmd" >&2
-    echo "Only a RuPochta instance owned by a unit is taken over automatically." >&2
+    echo "Only a proven RuPochta systemd unit is taken over automatically." >&2
     exit 1
   else
-    echo "port $APP_PORT is held by $owner_unit — an earlier install of this service"
+    echo "port $APP_PORT is held by $owner_unit"
     echo "  cmd: $squatter_cmd"
-    echo "stopping and disabling it so this deployment can take the port"
-    systemctl disable --now "$owner_unit"
+    if take_over_port_owner "$owner_unit" "$squatter_cmd"; then
+      echo "stopped and disabled a proven earlier RuPochta unit"
+    else
+      takeover_status=$?
+      if [ "$takeover_status" -eq 2 ]; then
+        echo "the process or its unit ExecStart is not proven to be RuPochta;" >&2
+        echo "refusing to disable $owner_unit automatically." >&2
+      else
+        echo "$owner_unit is proven to be RuPochta, but systemd could not stop it" >&2
+        echo "(status $takeover_status); refusing to continue with the port occupied." >&2
+      fi
+      exit 1
+    fi
   fi
 fi
 
@@ -227,40 +226,16 @@ fi
 # --------------------------------------------------------------------- TLS
 # Deliberately last: the challenge is served by the nginx started above, which
 # is why this could never have worked from the old ordering.
-if [ "$OBTAIN_CERT" -eq 1 ] && [ ! -d "$CERT_DIR" ]; then
+if [ "$OBTAIN_CERT" -eq 1 ]; then
   step "requesting a TLS certificate"
-  cert_names=("$DOMAIN_PUNYCODE")
-  for name in "www.$DOMAIN_PUNYCODE" "mail.$DOMAIN_PUNYCODE"; do
-    # A name that does not resolve fails the whole order, so ask only for the
-    # ones that are actually delegated here.
-    if getent hosts "$name" >/dev/null 2>&1; then
-      cert_names+=("$name")
-    else
-      echo "skipping $name — it does not resolve yet"
-    fi
-  done
-  certbot_args=(certonly --webroot -w /var/www/certbot --non-interactive --agree-tos)
-  if [ -n "$ACME_EMAIL" ]; then
-    certbot_args+=(-m "$ACME_EMAIL")
-  else
-    certbot_args+=(--register-unsafely-without-email)
-  fi
-  for name in "${cert_names[@]}"; do certbot_args+=(-d "$name"); done
-
-  if certbot "${certbot_args[@]}"; then
-    enable_site rupochta-rf.conf
-    nginx -t
-    systemctl reload nginx
-    echo "certificate installed — now serving HTTPS"
-  else
-    echo "certbot failed; the site stays on plain HTTP until it succeeds." >&2
-    echo "A CDN in front of the origin must forward /.well-known/acme-challenge/" >&2
-    echo "to this host without redirecting it to HTTPS." >&2
+  if ! request_tls_certificate; then
+    echo "TLS was explicitly requested but could not be installed." >&2
+    exit 1
   fi
 fi
 
 echo
-if [ -d "$CERT_DIR" ]; then
+if certificate_files_present; then
   echo "Installed, serving HTTPS from this host."
 else
   echo "Installed, serving plain HTTP — TLS is still terminated by whatever sits"

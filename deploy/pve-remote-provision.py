@@ -224,6 +224,68 @@ def shell(api: Proxmox, node: str, vmid: int, script: str, label: str, apply: bo
     return True
 
 
+def build_guest_verify_script() -> str:
+    """Build the in-guest health gate used after deployment.
+
+    Endpoint bodies are deliberately discarded: status codes are sufficient
+    for this gate, and response data does not belong in a public Actions log.
+    `/ready` is required because this deploys a mail service, not merely its UI.
+    """
+    return (
+        "set -uo pipefail\n"
+        "failed=0\n"
+        "check_unit() {\n"
+        "  unit=\"$1\"\n"
+        "  state=$(systemctl is-active \"$unit\" 2>/dev/null || true)\n"
+        "  echo \"  $unit -> ${state:-unknown}\"\n"
+        "  [ \"$state\" = active ] || failed=1\n"
+        "}\n"
+        "check_endpoint() {\n"
+        "  path=\"$1\"\n"
+        "  code=$(curl -sS -o /dev/null -w '%%{http_code}' --max-time 10 "
+        "\"http://127.0.0.1:18400$path\" 2>/dev/null || true)\n"
+        "  code=${code:-000}\n"
+        "  echo \"  $path -> $code\"\n"
+        "  [ \"$code\" = 200 ] || failed=1\n"
+        "}\n"
+        "check_unit nginx\n"
+        "check_unit rupochta.service\n"
+        "echo \"  source -> $(git -C %s log --oneline -1 2>&1 || echo unavailable)\"\n"
+        "check_endpoint /health\n"
+        "check_endpoint /ready\n"
+        "check_endpoint /api/signup/config\n"
+        "check_endpoint /signup\n"
+        "nginx_code=$(curl -sS -o /dev/null -w '%%{http_code}' --max-time 10 "
+        "http://127.0.0.1/ 2>/dev/null || true)\n"
+        "nginx_code=${nginx_code:-000}\n"
+        "echo \"  local nginx :80 -> $nginx_code\"\n"
+        "case \"$nginx_code\" in 200|301|302|307|308) ;; *) failed=1 ;; esac\n"
+        # These lines explain the network path without reading unit files,
+        # credentials, endpoint bodies, or other secret-bearing data.
+        "if ip route get 1.1.1.1 >/dev/null 2>&1; then\n"
+        "  echo '  route -> available (addresses redacted)'\n"
+        "else\n"
+        "  echo '  route -> unavailable'\n"
+        "fi\n"
+        "echo \"  cloudflared -> $(systemctl is-active cloudflared 2>&1 || true) "
+        "($(command -v cloudflared || echo 'not installed'))\"\n"
+        "echo \"  cf-config -> $([ -f /etc/cloudflared/config.yml ] "
+        "&& echo /etc/cloudflared/config.yml || echo 'dashboard-managed')\"\n"
+        "for port in 80 443; do\n"
+        "  if ss -ltn 2>/dev/null | grep -Eq \":$port([[:space:]]|$)\"; then\n"
+        "    echo \"  listener :$port -> present\"\n"
+        "  else\n"
+        "    echo \"  listener :$port -> absent\"\n"
+        "  fi\n"
+        "done\n"
+        "if [ \"$failed\" -ne 0 ]; then\n"
+        "  echo 'guest verification failed' >&2\n"
+        "  exit 1\n"
+        "fi\n"
+        "echo 'guest verification passed'\n"
+    ) % CHECKOUT_DIR
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--host", required=True, help="Proxmox host, e.g. pve.example.com or pve.example.com:8006")
@@ -334,42 +396,9 @@ def main() -> int:
             preview = f"set -euo pipefail\ncd {CHECKOUT_DIR}\nbash deploy/purge-lets-mobile-mailboxes.sh"
             shell(api, node, vmid, preview, "lets-mobile mailboxes (listing only)", args.apply)
 
-        # Report a status code per endpoint rather than piping curl into `&& echo`:
-        # a failing curl on the left of `&&` does not trip `set -e`, so the old
-        # form let a 404 on the signup route pass for a healthy deployment.
-        verify = (
-            "set -uo pipefail\n"
-            "echo \"nginx:    $(systemctl is-active nginx 2>&1)\"\n"
-            "echo \"rupochta: $(systemctl is-active rupochta.service 2>&1)\"\n"
-            "echo \"source:   $(git -C %s log --oneline -1 2>&1)\"\n"
-            "for path in /health /ready /api/signup/config /signup; do\n"
-            "  code=$(curl -s -o /tmp/rupochta-verify -w '%%{http_code}' "
-            "--max-time 10 \"http://127.0.0.1:18400$path\" || echo 000)\n"
-            "  echo \"  $path -> $code $(head -c 160 /tmp/rupochta-verify | tr -d '\\n')\"\n"
-            "done\n"
-            "rm -f /tmp/rupochta-verify\n"
-            "curl -s -o /dev/null -w 'local nginx :80 -> %%{http_code}\\n' "
-            "--max-time 10 http://127.0.0.1/ || true\n"
-            # How the outside world is supposed to arrive. A private source
-            # address means nothing reaches this host directly and something
-            # must be tunnelling to it; if that tunnel is not here, it is
-            # pointing somewhere else and no amount of fixing this host helps.
-            "echo \"route:    $(ip route get 1.1.1.1 2>&1 | head -1)\"\n"
-            "echo \"cloudflared: $(systemctl is-active cloudflared 2>&1) "
-            "($(command -v cloudflared || echo 'not installed'))\"\n"
-            # Only whether the ingress rules live here or in the dashboard —
-            # never the unit file or the credentials file, since a tunnel token
-            # in a public Actions log would be a leaked secret.
-            "echo \"cf-config: $([ -f /etc/cloudflared/config.yml ] "
-            "&& echo /etc/cloudflared/config.yml || echo 'dashboard-managed')\"\n"
-            "ss -ltnp 2>/dev/null | awk 'NR==1 || $4 ~ /:(80|443)$/'"
-        ) % CHECKOUT_DIR
-        try:
-            shell(api, node, vmid, verify, "verifying the service inside the guest", args.apply)
-        except ProxmoxError as exc:
-            # Everything above already succeeded. A read-only diagnostic that
-            # cannot run is worth a warning, not a failed deployment.
-            print(f"verification could not run: {exc}", file=sys.stderr)
+        verify = build_guest_verify_script()
+        if not shell(api, node, vmid, verify, "verifying the service inside the guest", args.apply):
+            return 1
 
         if not args.apply:
             print("\nDry run only — nothing was changed. Re-run with --apply.")

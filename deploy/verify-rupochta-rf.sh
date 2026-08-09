@@ -78,35 +78,23 @@ fi
 echo
 echo "application"
 
-# When a CDN or tunnel fronts the origin, a failure here is ambiguous: the app
-# may be down, or it may be fine and simply unreachable from the edge. Probing
-# plain HTTP as well as HTTPS separates the two — an origin that answers on
-# :80 but not :443 means the edge is asking for a scheme the origin does not
-# serve yet, which is a certificate problem, not an application problem.
-if [ "$SCHEME" = "https" ]; then
-  https_code="$(timeout 10 curl -s -o /dev/null -w '%{http_code}' "https://${HOST:-$DOMAIN}/health" 2>/dev/null || echo 000)"
-  http_code="$(timeout 10 curl -s -o /dev/null -w '%{http_code}' "http://${HOST:-$DOMAIN}/health" 2>/dev/null || echo 000)"
-  echo "  ..    reachability: https -> $https_code, http -> $http_code"
-  if [ "$https_code" != "200" ] && [ "$http_code" = "200" ]; then
-    warn "the origin answers over plain HTTP but not HTTPS — whatever fronts it
-        is fetching over TLS the origin does not serve. Put a certificate on the
-        origin (bootstrap-rupochta-rf.sh --tls) or set the front end to reach it
-        over HTTP."
-  fi
-fi
+# This is deliberately an edge-to-service check. When DNS points at a CDN or
+# tunnel, both HTTP and HTTPS requests hit that public edge; comparing them
+# cannot prove which protocol the private origin serves. The deployment driver
+# performs the separate in-guest origin gate against loopback.
 
 health="$(timeout 10 curl -fsS "$BASE/health" 2>/dev/null)"
 if [ -n "$health" ]; then
   ok "/health $health"
 else
-  bad "/health did not answer — the service is not running"
+  bad "/health did not answer through the public route — the app or edge routing is unavailable"
 fi
 
 ready="$(timeout 15 curl -fsS "$BASE/ready" 2>/dev/null)"
 if [ -n "$ready" ]; then
   ok "/ready $ready"
 else
-  bad "/ready did not answer — IMAP or SMTP is unreachable"
+  bad "/ready did not answer through the public route — mail readiness is unknown"
 fi
 
 signup="$(timeout 10 curl -fsS "$BASE/api/signup/config" 2>/dev/null)"
