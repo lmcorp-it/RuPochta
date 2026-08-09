@@ -340,7 +340,15 @@ def main() -> int:
             "done\n"
             "rm -f /tmp/rupochta-verify\n"
             "curl -s -o /dev/null -w 'local nginx :80 -> %%{http_code}\\n' "
-            "--max-time 10 http://127.0.0.1/ || true"
+            "--max-time 10 http://127.0.0.1/ || true\n"
+            # How the outside world is supposed to arrive. A private source
+            # address means nothing reaches this host directly and something
+            # must be tunnelling to it; if that tunnel is not here, it is
+            # pointing somewhere else and no amount of fixing this host helps.
+            "echo \"route:    $(ip route get 1.1.1.1 2>&1 | head -1)\"\n"
+            "echo \"cloudflared: $(systemctl is-active cloudflared 2>&1) "
+            "($(command -v cloudflared || echo 'not installed'))\"\n"
+            "ss -ltnp 2>/dev/null | awk 'NR==1 || $4 ~ /:(80|443)$/'"
         ) % CHECKOUT_DIR
         shell(api, node, vmid, verify, "verifying the service inside the guest", args.apply)
 
