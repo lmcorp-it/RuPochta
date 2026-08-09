@@ -348,19 +348,19 @@ def main() -> int:
             "echo \"route:    $(ip route get 1.1.1.1 2>&1 | head -1)\"\n"
             "echo \"cloudflared: $(systemctl is-active cloudflared 2>&1) "
             "($(command -v cloudflared || echo 'not installed'))\"\n"
-            # Only the ingress rules, which say which hostname goes to which
-            # local service — never the unit file or the credentials file, as
-            # a token in a public Actions log would be a leaked secret.
-            "if [ -f /etc/cloudflared/config.yml ]; then\n"
-            "  echo 'cloudflared ingress:'\n"
-            "  sed -n '/^ingress:/,$p' /etc/cloudflared/config.yml | sed 's/^/  /'\n"
-            "elif systemctl is-active --quiet cloudflared; then\n"
-            "  echo 'cloudflared: no local config.yml — the tunnel is managed from"
-            " the Cloudflare dashboard, so its ingress must be changed there'\n"
-            "fi\n"
+            # Only whether the ingress rules live here or in the dashboard —
+            # never the unit file or the credentials file, since a tunnel token
+            # in a public Actions log would be a leaked secret.
+            "echo \"cf-config: $([ -f /etc/cloudflared/config.yml ] "
+            "&& echo /etc/cloudflared/config.yml || echo 'dashboard-managed')\"\n"
             "ss -ltnp 2>/dev/null | awk 'NR==1 || $4 ~ /:(80|443)$/'"
         ) % CHECKOUT_DIR
-        shell(api, node, vmid, verify, "verifying the service inside the guest", args.apply)
+        try:
+            shell(api, node, vmid, verify, "verifying the service inside the guest", args.apply)
+        except ProxmoxError as exc:
+            # Everything above already succeeded. A read-only diagnostic that
+            # cannot run is worth a warning, not a failed deployment.
+            print(f"verification could not run: {exc}", file=sys.stderr)
 
         if not args.apply:
             print("\nDry run only — nothing was changed. Re-run with --apply.")
