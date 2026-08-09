@@ -185,7 +185,8 @@ docker compose -f docker-compose.dev.yml --env-file .env.dev up --build
 | `WEBMAIL_DB` | Путь к SQLite-базе состояния |
 | `MAIL_PUBLIC_SIGNUP` | Публичная регистрация: `0` — выкл, `1` — вкл |
 | `MAIL_SSO_ISSUER` · `MAIL_SSO_CLIENT_ID` · `MAIL_SSO_CLIENT_SECRET` | OIDC-вход |
-| `MAILADMIN_LDAPS_URLS` · `MAILADMIN_LDAPS_BASE_DN` | Каталог Active Directory |
+| `MAILADMIN_LDAPS_URLS` · `MAILADMIN_LDAPS_BASE_DN` | Каталог Active Directory (только `ldaps://`) |
+| `MAILADMIN_LDAPS_CA_FILE` | Корневой сертификат доменного CA, если его нет в системном наборе |
 | `MAIL_TICKET_INTAKE_URL` | Приём писем как заявок в helpdesk |
 | `RUPOCHTA_INTERNAL_TOKEN` | Внутренние интеграции |
 
