@@ -360,7 +360,8 @@ function updateQueueBadge(n) {
 function mailboxEmailFromValue(value) {
   const raw = String(value || "").trim().toLowerCase();
   if (!raw) return "";
-  const emailMatch = raw.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/);
+  // TLD допускает цифры и дефисы: IDN-домены приходят в punycode (xn--p1ai).
+  const emailMatch = raw.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z0-9-]{2,}/);
   if (emailMatch) return emailMatch[0];
   const candidate = raw.split("->").map((part) => part.trim()).filter(Boolean).pop() || raw;
   if (/^[a-z0-9][a-z0-9._-]{0,62}$/.test(candidate)) return `${candidate}@${PRIMARY_MAIL_DOMAIN}`;

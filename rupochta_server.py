@@ -13640,7 +13640,7 @@ def _parse_setup_email_accounts(output: str) -> List[str]:
     seen = set()
     for line in str(output or "").splitlines():
         match = re.search(
-            r"([a-z0-9][a-z0-9._+\-]*@[a-z0-9][a-z0-9.\-]*\.[a-z]{2,})",
+            r"([a-z0-9][a-z0-9._+\-]*@[a-z0-9][a-z0-9.\-]*\.[a-z0-9\-]{2,})",
             line.lower(),
         )
         if not match:
@@ -13673,7 +13673,7 @@ def _read_mail_accounts_file() -> Optional[List[str]]:
             not separator
             or not password_hash.strip()
             or not re.fullmatch(
-                r"[a-z0-9][a-z0-9._+\-]*@[a-z0-9][a-z0-9.\-]*\.[a-z]{2,}",
+                r"[a-z0-9][a-z0-9._+\-]*@[a-z0-9][a-z0-9.\-]*\.[a-z0-9\-]{2,}",
                 email_addr,
             )
         ):
@@ -14235,7 +14235,9 @@ _MAILSERVER_ACCOUNT_LOCK_PATH = os.environ.get(
     "/tmp/rupochta-mail-accounts.lock",
 )
 
-_EMAIL_RE = re.compile(r'^[a-z0-9][a-z0-9._\-]*@[a-z0-9.\-]+\.[a-z]{2,}$')
+# Последняя метка домена допускает цифры и дефисы: IDN-домены попадают сюда в
+# виде punycode, и у рупочта.рф зоной верхнего уровня будет xn--p1ai.
+_EMAIL_RE = re.compile(r'^[a-z0-9][a-z0-9._\-]*@[a-z0-9.\-]+\.[a-z0-9\-]{2,}$')
 
 
 @contextmanager
