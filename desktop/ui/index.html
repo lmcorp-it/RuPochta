@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RuПочта</title>
+<style>
+  :root { --blue: #1750d8; --red: #ed1b2f; --ink: #0b1d45; --muted: #55607a; --line: #e3e8f2; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: grid; place-items: center;
+    font: 15px/1.55 "Segoe UI", -apple-system, "Helvetica Neue", system-ui, sans-serif;
+    color: var(--ink); background: #f6f8fc;
+  }
+  .card { width: min(420px, 90vw); text-align: center; }
+  .wordmark { font: 700 34px/1 inherit; letter-spacing: -0.5px; margin-bottom: 6px; }
+  .wordmark b { color: var(--blue); } .wordmark i { color: var(--red); font-style: normal; }
+  p { color: var(--muted); margin: 0 0 26px; }
+  label { display: block; text-align: left; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 12px 14px; font: inherit; color: inherit;
+    border: 1px solid var(--line); border-radius: 10px; background: #fff;
+  }
+  input:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+  button {
+    width: 100%; margin-top: 14px; padding: 12px 14px; font: 600 inherit;
+    color: #fff; background: var(--blue); border: 0; border-radius: 10px; cursor: pointer;
+  }
+  button:hover { background: #1243b8; }
+  .error { color: var(--red); font-size: 13px; min-height: 18px; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="wordmark"><b>Ru</b><i>Почта</i></div>
+    <p>Укажите адрес вашего сервера — клиент откроет его в отдельном окне.</p>
+    <form id="connect">
+      <label for="server">Адрес сервера</label>
+      <input id="server" type="url" inputmode="url" placeholder="https://mail.example.com" required
+             autocomplete="url" autofocus>
+      <button type="submit">Открыть почту</button>
+      <div id="error" class="error" role="alert"></div>
+    </form>
+  </main>
+<script>
+  const input = document.getElementById("server");
+  const error = document.getElementById("error");
+  // The desktop client is a shell over a self-hosted deployment: every install
+  // has its own address, so it is asked once and remembered.
+  input.value = localStorage.getItem("rupochta.server") || "";
+
+  document.getElementById("connect").addEventListener("submit", (event) => {
+    event.preventDefault();
+    let url;
+    try {
+      url = new URL(input.value.trim());
+    } catch (_) {
+      error.textContent = "Не похоже на адрес. Пример: https://mail.example.com";
+      return;
+    }
+    if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
+      error.textContent = "Только https — по http уйдёт пароль от ящика.";
+      return;
+    }
+    localStorage.setItem("rupochta.server", url.toString());
+    window.location.replace(url.toString());
+  });
+</script>
+</body>
+</html>

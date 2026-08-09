@@ -47,6 +47,8 @@ def _extract_function(name: str) -> str:
 
 
 def _load_security_helpers():
+    from utils import authentication, validation
+    
     namespace = {
         "Any": Any,
         "Dict": Dict,
@@ -60,6 +62,8 @@ def _load_security_helpers():
         "types": types,
         "CFG": types.SimpleNamespace(SESSION_COOKIE="mail-session"),
         "session_get": lambda _token: {"email": "operator@example.com"},
+        "authentication": authentication,
+        "validation": validation,
     }
     for name in (
         "_sanitize_portal_profile",

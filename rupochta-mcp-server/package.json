@@ -1,0 +1,43 @@
+{
+  "name": "rupochta-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for RuPochta — mailbox, compose, filters, scheduling and calendar tools over the RuPochta HTTP API",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "rupochta-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "rupochta",
+    "email",
+    "imap",
+    "smtp"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

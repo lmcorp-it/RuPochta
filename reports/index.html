@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Readiness — RuPochta</title>
+  <style>
+    :root {
+      --bg:#0f1115; --panel:#161a22; --panel-2:#1d2230; --border:#262c3a;
+      --text:#e6e9ef; --muted:#8a93a6; --accent:#6ea8ff;
+      --good:#4ade80; --warn:#fbbf24; --bad:#f87171;
+    }
+    * { box-sizing: border-box; }
+    html,body { margin:0; background:var(--bg); color:var(--text);
+      font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+    a { color: var(--accent); }
+    header { padding: 28px 32px; border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg,#141823,#0f1115); }
+    header h1 { margin: 0 0 4px; font-size: 22px; }
+    header .meta { color: var(--muted); font-size: 13px; }
+    main { max-width: 1180px; margin: 0 auto; padding: 24px 32px 80px; }
+    .panel { background:var(--panel); border:1px solid var(--border);
+      border-radius:10px; padding:20px; margin-bottom:18px; }
+    .grid { display:grid; gap:16px; }
+    .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid.cols-2 { grid-template-columns: 1fr 1fr; }
+    .kpi .num { font-size: 30px; font-weight: 700; }
+    .kpi .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .8px; }
+    .badge { display:inline-block; padding:3px 10px; border-radius:999px;
+      font-size:12px; font-weight:600; }
+    .lvl-1 { background:#3a1f24; color:#f87171; }
+    .lvl-2 { background:#3b2c1d; color:#fbbf24; }
+    .lvl-3 { background:#2c3119; color:#d3e85e; }
+    .lvl-4 { background:#1d3325; color:#4ade80; }
+    .lvl-5 { background:#1c2c3d; color:#6ea8ff; }
+    .bar { height:8px; background:var(--panel-2); border-radius:4px; overflow:hidden; }
+    .bar > span { display:block; height:100%; background: var(--accent); }
+    .bar.good > span { background: var(--good); }
+    .bar.warn > span { background: var(--warn); }
+    .bar.bad  > span { background: var(--bad); }
+    table { width:100%; border-collapse:collapse; }
+    th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); font-size:13px; }
+    th { color:var(--muted); font-weight:500; text-transform:uppercase; font-size:11px; letter-spacing:.8px; }
+    code { background:#0a0c11; padding:1px 6px; border-radius:4px; }
+    h2 { font-size:14px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin:0 0 12px; }
+    .dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+    .dot.good { background:var(--good); } .dot.warn { background:var(--warn); } .dot.bad { background:var(--bad); }
+    footer { color: var(--muted); font-size: 12px; text-align: center; padding: 20px; }
+
+    /* Pillar cards */
+    .pillar { background:var(--panel-2); border:1px solid var(--border);
+      border-radius:8px; padding:14px 16px; }
+    .pillar h3 { margin:0 0 6px; font-size:15px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .pillar .why  { color:var(--muted); font-size:13px; margin:8px 0 0; }
+    .pillar .what { font-size:13px; margin:6px 0 0; }
+    .pillar .rec  { font-size:13px; margin:8px 0 0; }
+    .rel { font-size:10px; padding:2px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:.6px; font-weight:600; }
+    .rel.high   { background:#1c2c3d; color:#6ea8ff; }
+    .rel.medium { background:#2c3119; color:#d3e85e; }
+    .rel.low    { background:#262c3a; color:#8a93a6; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AI Readiness Report</h1>
+    <div class="meta">
+      <strong>RuPochta</strong> · Assessed 2026-08-07 ·
+      <span class="badge lvl-1">L0 — Not yet Functional</span> ·
+      Overall <strong>30%</strong> · Grade <strong>F</strong>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- 1. What is AI Readiness? -->
+    <section class="panel">
+      <h2>What is AI Readiness?</h2>
+      <p>AI coding agents are only as effective as the context they receive. AgentRC measures how AI-ready a repo is across <strong>9 pillars</strong> in two categories — Repo Health and AI Setup — and maps the result to a <strong>5-level maturity model</strong>. This report is the <em>Measure</em> step in AgentRC's <em>Measure → Generate → Maintain</em> loop.</p>
+      <p style="color:var(--muted);font-size:13px;margin-top:8px">Each pillar carries an <strong>AI relevance</strong> rating (High / Medium / Low) so you can tell at a glance which gaps most directly affect Copilot's output and which are general engineering hygiene.</p>
+    </section>
+
+    <!-- 2. KPIs -->
+    <section class="grid cols-3">
+      <div class="panel kpi"><span class="lbl">Maturity</span><div class="num"><span class="badge lvl-1">L0 — Not yet Functional</span></div></div>
+      <div class="panel kpi"><span class="lbl">Overall Score</span><div class="num">30%</div><div style="color:var(--muted);font-size:12px">Grade F</div></div>
+      <div class="panel kpi"><span class="lbl">Pass rate</span><div class="num">28%</div><div style="color:var(--muted);font-size:12px">Threshold —</div></div>
+    </section>
+
+    <!-- 3. Maturity progression -->
+    <section class="panel">
+      <h2>Maturity Progression</h2>
+      <table>
+        <thead><tr><th>Level</th><th>Name</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>L5</td><td>Autonomous</td><td>Not achieved (0/0 criteria passed)</td></tr>
+          <tr><td>L4</td><td>Optimized</td><td>Not achieved (0/0 criteria passed)</td></tr>
+          <tr><td>L3</td><td>Standardized</td><td>Not achieved (1/5 criteria passed)</td></tr>
+          <tr><td>L2</td><td>Documented</td><td>Not achieved (2/8 criteria passed)</td></tr>
+          <tr><td>L1</td><td>Functional</td><td>Below this level (2/5 criteria passed)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 5. Repo Health Pillars -->
+    <section class="panel">
+      <h2>Repo Health Breakdown</h2>
+      <div class="grid cols-2">
+          <div class="pillar">
+            <h3>
+              <span class="dot bad"></span>
+              Style &amp; Validation
+              <span class="rel medium">AI relevance: medium</span>
+              <span style="margin-left:auto;color:var(--muted);font-size:13px">0%</span>
+            </h3>
+            <div class="bar bad"><span style="width:0%"></span></div>
+            <p class="what"><strong>What it measures:</strong> Linter configuration (ESLint/Biome/Prettier) and type-checking configuration (TypeScript/Mypy).</p>
+            <p class="why"><strong>Why it matters for AI:</strong> Lint and type rules are the most explicit form of house style an agent can read. With them in place, Copilot generates code that passes review on the first try; without them, the agent has to guess at conventions and PRs churn on style nits.</p>
+            <p class="rec"><strong>Current state:</strong> AgentRC found neither a supported lint configuration nor tsconfig.json, pyproject.toml, or mypy.ini (0/2).</p>
+            <p class="rec"><strong>Recommendation:</strong> Add a repository-level lint configuration and a pyproject.toml or mypy.ini type-check configuration aligned to the Python and frontend code.</p>
+          </div>
+          <div class="pillar">
+            <h3>
+              <span class="dot good"></span>
+              Build System
+              <span class="rel high">AI relevance: high</span>
+              <span style="margin-left:auto;color:var(--muted);font-size:13px">100%</span>
+            </h3>
+            <div class="bar good"><span style="width:100%"></span></div>
+            <p class="what"><strong>What it measures:</strong> A build script in package.json and CI workflow configuration.</p>
+            <p class="why"><strong>Why it matters for AI:</strong> An agent without a build command cannot self-verify. A canonical npm run build (and a CI workflow that mirrors it) lets the agent compile, catch type errors, and iterate before opening a PR — the difference between works on my machine and a clean check run.</p>
+            <p class="rec"><strong>Current state:</strong> AgentRC found no root application package, so the build-script check was skipped; it did detect CI in .github/workflows (1/1).</p>
+            <p class="rec"><strong>Recommendation:</strong> Retain CI and document canonical build entry points in README.md; add unified root task metadata only if a repository-wide command is intended.</p>
+          </div>
+          <div class="pillar">
+            <h3>
+              <span class="dot warn"></span>
+              Testing
+              <span class="rel high">AI relevance: high</span>
+              <span style="margin-left:auto;color:var(--muted);font-size:13px">0%</span>
+            </h3>
+            <div class="bar warn"><span style="width:0%"></span></div>
+            <p class="what"><strong>What it measures:</strong> A test script and area-scoped test scripts.</p>
+            <p class="why"><strong>Why it matters for AI:</strong> Tests are the agent&#39;s automated quality gate. With a test script the agent can run TDD loops and prove behaviour; with area-scoped tests it can run only what&#39;s relevant and stay fast. No tests = no objective signal for the agent to know when it&#39;s done.</p>
+            <p class="rec"><strong>Current state:</strong> AgentRC evaluated no packaged test-script criterion (0/0) because no root app package was detected. Existing CI runs Python unittest discovery and npm test in rupochta-mcp-server.</p>
+            <p class="rec"><strong>Recommendation:</strong> Expose canonical root and area-scoped test commands through discoverable project metadata while retaining the existing CI commands.</p>
+          </div>
+          <div class="pillar">
+            <h3>
+              <span class="dot good"></span>
+              Documentation
+              <span class="rel high">AI relevance: high</span>
+              <span style="margin-left:auto;color:var(--muted);font-size:13px">100%</span>
+            </h3>
+            <div class="bar good"><span style="width:100%"></span></div>
+            <p class="what"><strong>What it measures:</strong> README, CONTRIBUTING, and area-scoped READMEs.</p>
+            <p class="why"><strong>Why it matters for AI:</strong> Docs are the agent&#39;s primary context source. README explains the stack, CONTRIBUTING explains the process, area READMEs explain local conventions. Repos with rich docs see dramatically better Copilot suggestions because the model is grounded in real intent instead of guessing from filenames.</p>
+            <p class="rec"><strong>Current state:</strong> README.md and CONTRIBUTING.md are present (2/2); the README also documents project layout, local setup, and tests.</p>
+            <p class="rec"><strong>Recommendation:</strong> Keep the root guides current and add area-specific READMEs only as components gain independent workflows.</p>
+          </div>
+          <div class="pillar">
+            <h3>
+              <span class="dot bad"></span>
+              Dev Environment
+              <span class="rel medium">AI relevance: medium</span>
+              <span style="margin-left:auto;color:var(--muted);font-size:13px">0%</span>
+            </h3>
+            <div class="bar bad"><span style="width:0%"></span></div>
+            <p class="what"><strong>What it measures:</strong> A lockfile and .env.example.</p>
+            <p class="why"><strong>Why it matters for AI:</strong> A lockfile pins versions so the agent&#39;s npm install matches CI. .env.example tells the agent which env vars exist without leaking secrets. Together they make the agent&#39;s local runs reproducible and stop it from inventing config that doesn&#39;t apply.</p>
+            <p class="rec"><strong>Current state:</strong> No repository-root package-manager lockfile or .env.example/.env.sample was detected (0/2). .env.dev.example exists for Docker development.</p>
+            <p class="rec"><strong>Recommendation:</strong> Add a committed dependency lockfile and a sanitized .env.example that lists supported variables and safe defaults.</p>
+          </div>
+          <div class="pillar">
+            <h3>
+              <span class="dot bad"></span>
+              Code Quality
+              <span class="rel medium">AI relevance: medium</span>
+              <span style="margin-left:auto;color:var(--muted);font-size:13px">0%</span>
+            </h3>
+            <div class="bar bad"><span style="width:0%"></span></div>
+            <p class="what"><strong>What it measures:</strong> Formatter configuration (Prettier/Biome).</p>
+            <p class="why"><strong>Why it matters for AI:</strong> A formatter config means the agent&#39;s output lands pre-formatted — no diff noise, no review comments about whitespace. Without it, AI-generated PRs trigger style discussions that drown out real feedback.</p>
+            <p class="rec"><strong>Current state:</strong> No Prettier or Biome formatter configuration was found (0/1). CONTRIBUTING.md notes that a linter is intentionally absent.</p>
+            <p class="rec"><strong>Recommendation:</strong> Choose and document a formatter configuration, such as biome.json for frontend assets, without forcing unrelated whole-file reformatting.</p>
+          </div>
+          <div class="pillar">
+            <h3>
+              <span class="dot bad"></span>
+              Observability
+              <span class="rel low">AI relevance: low</span>
+              <span style="margin-left:auto;color:var(--muted);font-size:13px">0%</span>
+            </h3>
+            <div class="bar bad"><span style="width:0%"></span></div>
+            <p class="what"><strong>What it measures:</strong> OpenTelemetry, Pino, Winston, or Bunyan tooling.</p>
+            <p class="why"><strong>Why it matters for AI:</strong> When logging/tracing libraries are visible in the dependency graph, the agent instruments new code with the same patterns instead of console.log. Lower leverage than docs/tests because the agent only needs it for the subset of work that touches runtime instrumentation.</p>
+            <p class="rec"><strong>Current state:</strong> No supported observability or logging dependency was detected (0/1).</p>
+            <p class="rec"><strong>Recommendation:</strong> Plan structured logging or tracing with Python-compatible tooling and document the pattern agents should follow.</p>
+          </div>
+          <div class="pillar">
+            <h3>
+              <span class="dot warn"></span>
+              Security &amp; Governance
+              <span class="rel low">AI relevance: low</span>
+              <span style="margin-left:auto;color:var(--muted);font-size:13px">50%</span>
+            </h3>
+            <div class="bar warn"><span style="width:50%"></span></div>
+            <p class="what"><strong>What it measures:</strong> LICENSE, CODEOWNERS, SECURITY.md, and Dependabot.</p>
+            <p class="why"><strong>Why it matters for AI:</strong> CODEOWNERS routes AI-generated PRs to the right reviewers automatically. SECURITY.md and Dependabot tell the agent how to handle vulnerability reports and dependency bumps. Important for governance, but rarely changes what code the agent writes day-to-day.</p>
+            <p class="rec"><strong>Current state:</strong> LICENSE and SECURITY.md are present (2/4); .github/CODEOWNERS and .github/dependabot.yml are absent.</p>
+            <p class="rec"><strong>Recommendation:</strong> Add ownership routing and dependency-update configuration in .github/CODEOWNERS and .github/dependabot.yml.</p>
+          </div>
+      </div>
+    </section>
+
+    <!-- 6. AI Setup Pillars -->
+    <section class="panel">
+      <h2>AI Setup Breakdown</h2>
+      <div class="grid cols-2">
+          <div class="pillar">
+            <h3>
+              <span class="dot bad"></span>
+              AI Tooling
+              <span class="rel high">AI relevance: high</span>
+              <span style="margin-left:auto;color:var(--muted);font-size:13px">0%</span>
+            </h3>
+            <div class="bar bad"><span style="width:0%"></span></div>
+            <p class="what"><strong>What it measures:</strong> Custom instructions, MCP servers, agent configs, and AI skills.</p>
+            <p class="why"><strong>Why it matters for AI:</strong> The direct interface between repo and AI agents — the highest-leverage pillar in the entire model. A good AGENTS.md is worth more than every other pillar combined: it tells the agent your stack, conventions, build commands, test commands, and review expectations in one place. MCP servers and custom skills extend the agent&#39;s reach into your tools.</p>
+            <p class="rec"><strong>Current state:</strong> No recognized custom instruction, MCP client configuration, custom-agent directory, skills directory, or apm.yml was detected (0/5). The repository includes a rupochta-mcp-server implementation, but no client MCP configuration.</p>
+            <p class="rec"><strong>Recommendation:</strong> Start with .github/copilot-instructions.md, then add .vscode/mcp.json for the existing MCP server; adopt agents, skills, and APM only where they make workflows repeatable.</p>
+          </div>
+      </div>
+    </section>
+
+    <!-- 7. Extras -->
+    <section class="panel">
+      <h2>Extras (informational, do not affect score)</h2>
+      <table>
+        <thead><tr><th></th><th>Extra</th><th>Status</th></tr></thead>
+        <tbody>
+            <tr><td>&#x25FB;</td><td>AGENTS.md present</td><td>missing</td></tr>
+            <tr><td>&#x2705;</td><td>Pull request template present</td><td>present</td></tr>
+            <tr><td>&#x25FB;</td><td>Pre-commit hooks configured</td><td>missing</td></tr>
+            <tr><td>&#x25FB;</td><td>Architecture guide present</td><td>missing (DESIGN.md exists, but AgentRC did not identify an architecture guide)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 8. Prioritised Remediation Plan -->
+    <section class="panel">
+      <h2>Prioritised Remediation Plan</h2>
+      <h3 style="color:var(--bad)">🔴 Fix First (high impact / low effort)</h3>
+      <table><thead><tr><th>#</th><th>Finding</th><th>File / config</th><th>Why it matters</th></tr></thead><tbody>              <tr><td>1</td><td>Configure linting and formatting (high / low)</td><td><code>biome.json</code></td><td>Explicit rules let agents self-correct style and avoid review churn.</td></tr>
+              <tr><td>2</td><td>Lock dependencies (high / low)</td><td><code>requirements.lock</code></td><td>Pinned Python dependencies make agent and CI installs reproducible.</td></tr>
+              <tr><td>3</td><td>Add custom AI instructions (high / low)</td><td><code>.github/copilot-instructions.md</code></td><td>Repository-specific commands and conventions are the highest-leverage context for agents.</td></tr>
+              <tr><td>4</td><td>Add MCP client configuration (high / low)</td><td><code>.vscode/mcp.json</code></td><td>This makes the existing RuPochta MCP server discoverable to configured coding agents.</td></tr></tbody></table>
+      <h3 style="color:var(--warn)">🟡 Fix Next (medium impact / low effort)</h3>
+      <table><thead><tr><th>#</th><th>Finding</th><th>File / config</th><th>Why</th></tr></thead><tbody>              <tr><td>1</td><td>Configure type checking (medium / low)</td><td><code>pyproject.toml or mypy.ini</code></td><td>Static checks give agents a fast correctness signal before review.</td></tr>
+              <tr><td>2</td><td>Publish a generic environment example (medium / low)</td><td><code>.env.example</code></td><td>A neutral variable inventory prevents agents from inventing setup and keeps secrets out of guidance.</td></tr>
+              <tr><td>3</td><td>Route code ownership (medium / low)</td><td><code>.github/CODEOWNERS</code></td><td>Automatic reviewer routing ensures generated PRs reach the right maintainers.</td></tr>
+              <tr><td>4</td><td>Adopt an APM manifest where shared packages are desired (medium / low)</td><td><code>apm.yml</code></td><td>A manifest can keep shared AI guidance and agent packages synchronized across repositories.</td></tr></tbody></table>
+      <h3 style="color:var(--accent)">🔵 Plan (medium impact / medium effort)</h3>
+      <table><thead><tr><th>#</th><th>Finding</th><th>File / config</th><th>Why</th></tr></thead><tbody>              <tr><td>1</td><td>Enable dependency update automation (medium / medium)</td><td><code>.github/dependabot.yml</code></td><td>Managed dependency updates help agents and reviewers handle upgrades consistently.</td></tr>
+              <tr><td>2</td><td>Standardize observability (medium / medium)</td><td><code>requirements.txt and application logging configuration</code></td><td>A documented instrumentation pattern lets agents extend runtime telemetry consistently.</td></tr>
+              <tr><td>3</td><td>Configure custom AI agents (medium / medium)</td><td><code>.github/agents/</code></td><td>Purpose-built agents can encode repeatable review and maintenance workflows.</td></tr>
+              <tr><td>4</td><td>Add shared AI skills where they help (medium / medium)</td><td><code>.github/skills/</code></td><td>Skills package specialized, reusable workflows without expanding every instruction file.</td></tr></tbody></table>
+    </section>
+
+    <!-- 9. Next steps -->
+    <section class="panel">
+      <h2>Next Steps</h2>
+      <ol>
+        <li>Generate or refresh instructions: <code>agentrc instructions --output .github/copilot-instructions.md</code> (or use the <code>generate-instructions</code> skill).</li>
+        <li>Address each item under <strong>🔴 Fix First</strong>; re-run this report to confirm score improvement.</li>
+        <li>Codify org standards via a JSON policy (<code>strict.json</code>, <code>ai-only.json</code>, …) and re-run with <code>--policy</code>.</li>
+        <li>Wire <code>agentrc readiness --fail-level &lt;n&gt;</code> into CI to prevent regressions.</li>
+      </ol>
+    </section>
+
+    <!-- 10. Raw data -->
+    <details class="panel">
+      <summary style="cursor:pointer;color:var(--muted)">Raw AgentRC JSON</summary>
+      <pre style="overflow:auto;font-size:11px;color:#b8c0d2">{
+  &quot;ok&quot;: true,
+  &quot;status&quot;: &quot;success&quot;,
+  &quot;data&quot;: {
+    &quot;repoPath&quot;: &quot;C:\\Users\\Bomj\\RuPochta\\RuPochta\\copilot-worktrees\\RuPochta\\lmcorp-it-urban-winner&quot;,
+    &quot;generatedAt&quot;: &quot;2026-08-06T21:06:55.287Z&quot;,
+    &quot;isMonorepo&quot;: false,
+    &quot;apps&quot;: [],
+    &quot;pillars&quot;: [
+      {
+        &quot;id&quot;: &quot;style-validation&quot;,
+        &quot;name&quot;: &quot;Style &amp; Validation&quot;,
+        &quot;passed&quot;: 0,
+        &quot;total&quot;: 2,
+        &quot;passRate&quot;: 0
+      },
+      {
+        &quot;id&quot;: &quot;build-system&quot;,
+        &quot;name&quot;: &quot;Build System&quot;,
+        &quot;passed&quot;: 1,
+        &quot;total&quot;: 1,
+        &quot;passRate&quot;: 1
+      },
+      {
+        &quot;id&quot;: &quot;testing&quot;,
+        &quot;name&quot;: &quot;Testing&quot;,
+        &quot;passed&quot;: 0,
+        &quot;total&quot;: 0,
+        &quot;passRate&quot;: 0
+      },
+      {
+        &quot;id&quot;: &quot;documentation&quot;,
+        &quot;name&quot;: &quot;Documentation&quot;,
+        &quot;passed&quot;: 2,
+        &quot;total&quot;: 2,
+        &quot;passRate&quot;: 1
+      },
+      {
+        &quot;id&quot;: &quot;dev-environment&quot;,
+        &quot;name&quot;: &quot;Dev Environment&quot;,
+        &quot;passed&quot;: 0,
+        &quot;total&quot;: 2,
+        &quot;passRate&quot;: 0
+      },
+      {
+        &quot;id&quot;: &quot;code-quality&quot;,
+        &quot;name&quot;: &quot;Code Quality&quot;,
+        &quot;passed&quot;: 0,
+        &quot;total&quot;: 1,
+        &quot;passRate&quot;: 0
+      },
+      {
+        &quot;id&quot;: &quot;observability&quot;,
+        &quot;name&quot;: &quot;Observability&quot;,
+        &quot;passed&quot;: 0,
+        &quot;total&quot;: 1,
+        &quot;passRate&quot;: 0
+      },
+      {
+        &quot;id&quot;: &quot;security-governance&quot;,
+        &quot;name&quot;: &quot;Security &amp; Governance&quot;,
+        &quot;passed&quot;: 2,
+        &quot;total&quot;: 4,
+        &quot;passRate&quot;: 0.5
+      },
+      {
+        &quot;id&quot;: &quot;ai-tooling&quot;,
+        &quot;name&quot;: &quot;AI Tooling&quot;,
+        &quot;passed&quot;: 0,
+        &quot;total&quot;: 5,
+        &quot;passRate&quot;: 0
+      }
+    ],
+    &quot;levels&quot;: [
+      {
+        &quot;level&quot;: 1,
+        &quot;name&quot;: &quot;Functional&quot;,
+        &quot;passed&quot;: 2,
+        &quot;total&quot;: 5,
+        &quot;passRate&quot;: 0.4,
+        &quot;achieved&quot;: false
+      },
+      {
+        &quot;level&quot;: 2,
+        &quot;name&quot;: &quot;Documented&quot;,
+        &quot;passed&quot;: 2,
+        &quot;total&quot;: 8,
+        &quot;passRate&quot;: 0.25,
+        &quot;achieved&quot;: false
+      },
+      {
+        &quot;level&quot;: 3,
+        &quot;name&quot;: &quot;Standardized&quot;,
+        &quot;passed&quot;: 1,
+        &quot;total&quot;: 5,
+        &quot;passRate&quot;: 0.2,
+        &quot;achieved&quot;: false
+      },
+      {
+        &quot;level&quot;: 4,
+        &quot;name&quot;: &quot;Optimized&quot;,
+        &quot;passed&quot;: 0,
+        &quot;total&quot;: 0,
+        &quot;passRate&quot;: 0,
+        &quot;achieved&quot;: false
+      },
+      {
+        &quot;level&quot;: 5,
+        &quot;name&quot;: &quot;Autonomous&quot;,
+        &quot;passed&quot;: 0,
+        &quot;total&quot;: 0,
+        &quot;passRate&quot;: 0,
+        &quot;achieved&quot;: false
+      }
+    ],
+    &quot;achievedLevel&quot;: 0,
+    &quot;criteria&quot;: [
+      {
+        &quot;id&quot;: &quot;lint-config&quot;,
+        &quot;title&quot;: &quot;Linting configured&quot;,
+        &quot;pillar&quot;: &quot;style-validation&quot;,
+        &quot;level&quot;: 1,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;high&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;Missing ESLint/Biome/Prettier configuration.&quot;,
+        &quot;evidence&quot;: [
+          &quot;eslint.config.js&quot;,
+          &quot;.eslintrc&quot;,
+          &quot;biome.json&quot;,
+          &quot;.prettierrc&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;typecheck-config&quot;,
+        &quot;title&quot;: &quot;Type checking configured&quot;,
+        &quot;pillar&quot;: &quot;style-validation&quot;,
+        &quot;level&quot;: 2,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;Missing type checking config (tsconfig or equivalent).&quot;,
+        &quot;evidence&quot;: [
+          &quot;tsconfig.json&quot;,
+          &quot;pyproject.toml&quot;,
+          &quot;mypy.ini&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;build-script&quot;,
+        &quot;title&quot;: &quot;Build script present&quot;,
+        &quot;pillar&quot;: &quot;build-system&quot;,
+        &quot;level&quot;: 1,
+        &quot;scope&quot;: &quot;app&quot;,
+        &quot;impact&quot;: &quot;high&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;skip&quot;,
+        &quot;reason&quot;: &quot;No application packages detected.&quot;
+      },
+      {
+        &quot;id&quot;: &quot;ci-config&quot;,
+        &quot;title&quot;: &quot;CI workflow configured&quot;,
+        &quot;pillar&quot;: &quot;build-system&quot;,
+        &quot;level&quot;: 2,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;high&quot;,
+        &quot;effort&quot;: &quot;medium&quot;,
+        &quot;status&quot;: &quot;pass&quot;,
+        &quot;evidence&quot;: [
+          &quot;.github/workflows&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;test-script&quot;,
+        &quot;title&quot;: &quot;Test script present&quot;,
+        &quot;pillar&quot;: &quot;testing&quot;,
+        &quot;level&quot;: 1,
+        &quot;scope&quot;: &quot;app&quot;,
+        &quot;impact&quot;: &quot;high&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;skip&quot;,
+        &quot;reason&quot;: &quot;No application packages detected.&quot;
+      },
+      {
+        &quot;id&quot;: &quot;readme&quot;,
+        &quot;title&quot;: &quot;README present&quot;,
+        &quot;pillar&quot;: &quot;documentation&quot;,
+        &quot;level&quot;: 1,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;high&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;pass&quot;,
+        &quot;evidence&quot;: [
+          &quot;README.md&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;contributing&quot;,
+        &quot;title&quot;: &quot;CONTRIBUTING guide present&quot;,
+        &quot;pillar&quot;: &quot;documentation&quot;,
+        &quot;level&quot;: 2,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;pass&quot;
+      },
+      {
+        &quot;id&quot;: &quot;lockfile&quot;,
+        &quot;title&quot;: &quot;Lockfile present&quot;,
+        &quot;pillar&quot;: &quot;dev-environment&quot;,
+        &quot;level&quot;: 1,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;high&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;Missing package manager lockfile.&quot;
+      },
+      {
+        &quot;id&quot;: &quot;env-example&quot;,
+        &quot;title&quot;: &quot;Environment example present&quot;,
+        &quot;pillar&quot;: &quot;dev-environment&quot;,
+        &quot;level&quot;: 2,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;Missing .env.example or .env.sample for setup guidance.&quot;
+      },
+      {
+        &quot;id&quot;: &quot;format-config&quot;,
+        &quot;title&quot;: &quot;Formatter configured&quot;,
+        &quot;pillar&quot;: &quot;code-quality&quot;,
+        &quot;level&quot;: 2,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;Missing Prettier/Biome formatting config.&quot;
+      },
+      {
+        &quot;id&quot;: &quot;codeowners&quot;,
+        &quot;title&quot;: &quot;CODEOWNERS present&quot;,
+        &quot;pillar&quot;: &quot;security-governance&quot;,
+        &quot;level&quot;: 2,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;Missing CODEOWNERS file.&quot;
+      },
+      {
+        &quot;id&quot;: &quot;license&quot;,
+        &quot;title&quot;: &quot;LICENSE present&quot;,
+        &quot;pillar&quot;: &quot;security-governance&quot;,
+        &quot;level&quot;: 1,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;pass&quot;
+      },
+      {
+        &quot;id&quot;: &quot;security-policy&quot;,
+        &quot;title&quot;: &quot;Security policy present&quot;,
+        &quot;pillar&quot;: &quot;security-governance&quot;,
+        &quot;level&quot;: 3,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;high&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;pass&quot;
+      },
+      {
+        &quot;id&quot;: &quot;dependabot&quot;,
+        &quot;title&quot;: &quot;Dependabot configured&quot;,
+        &quot;pillar&quot;: &quot;security-governance&quot;,
+        &quot;level&quot;: 3,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;medium&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;Missing .github/dependabot.yml configuration.&quot;
+      },
+      {
+        &quot;id&quot;: &quot;observability&quot;,
+        &quot;title&quot;: &quot;Observability tooling present&quot;,
+        &quot;pillar&quot;: &quot;observability&quot;,
+        &quot;level&quot;: 3,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;medium&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;No observability dependencies detected (OpenTelemetry/logging).&quot;
+      },
+      {
+        &quot;id&quot;: &quot;custom-instructions&quot;,
+        &quot;title&quot;: &quot;Custom instructions or agent guidance&quot;,
+        &quot;pillar&quot;: &quot;ai-tooling&quot;,
+        &quot;level&quot;: 1,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;high&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;Missing custom instructions (e.g. copilot-instructions.md, CLAUDE.md, AGENTS.md, .cursorrules).&quot;,
+        &quot;evidence&quot;: [
+          &quot;copilot-instructions.md&quot;,
+          &quot;CLAUDE.md&quot;,
+          &quot;AGENTS.md&quot;,
+          &quot;.cursorrules&quot;,
+          &quot;.github/copilot-instructions.md&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;instructions-consistency&quot;,
+        &quot;title&quot;: &quot;AI instruction files are consistent&quot;,
+        &quot;pillar&quot;: &quot;ai-tooling&quot;,
+        &quot;level&quot;: 2,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;skip&quot;,
+        &quot;reason&quot;: &quot;Fewer than 2 instruction files found.&quot;
+      },
+      {
+        &quot;id&quot;: &quot;mcp-config&quot;,
+        &quot;title&quot;: &quot;MCP configuration present&quot;,
+        &quot;pillar&quot;: &quot;ai-tooling&quot;,
+        &quot;level&quot;: 2,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;high&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;Missing MCP (Model Context Protocol) configuration (e.g. .vscode/mcp.json).&quot;,
+        &quot;evidence&quot;: [
+          &quot;.vscode/mcp.json&quot;,
+          &quot;.vscode/settings.json (mcp section)&quot;,
+          &quot;mcp.json&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;custom-agents&quot;,
+        &quot;title&quot;: &quot;Custom AI agents configured&quot;,
+        &quot;pillar&quot;: &quot;ai-tooling&quot;,
+        &quot;level&quot;: 3,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;medium&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;No custom AI agents configured (e.g. .github/agents/, .copilot/agents/).&quot;,
+        &quot;evidence&quot;: [
+          &quot;.github/agents/&quot;,
+          &quot;.copilot/agents/&quot;,
+          &quot;.github/copilot/agents/&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;copilot-skills&quot;,
+        &quot;title&quot;: &quot;Copilot/Claude skills present&quot;,
+        &quot;pillar&quot;: &quot;ai-tooling&quot;,
+        &quot;level&quot;: 3,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;medium&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;No Copilot or Claude skills found (e.g. .copilot/skills/, .github/skills/).&quot;,
+        &quot;evidence&quot;: [
+          &quot;.copilot/skills/&quot;,
+          &quot;.github/skills/&quot;,
+          &quot;.claude/skills/&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;apm-config&quot;,
+        &quot;title&quot;: &quot;APM package manifest present&quot;,
+        &quot;pillar&quot;: &quot;ai-tooling&quot;,
+        &quot;level&quot;: 2,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;No apm.yml found. Use APM to install shared agent packages and keep instructions in sync across repos. See: https://github.com/microsoft/apm&quot;,
+        &quot;evidence&quot;: [
+          &quot;apm.yml&quot;
+        ]
+      },
+      {
+        &quot;id&quot;: &quot;apm-locked-deps&quot;,
+        &quot;title&quot;: &quot;APM dependencies locked&quot;,
+        &quot;pillar&quot;: &quot;ai-tooling&quot;,
+        &quot;level&quot;: 3,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;medium&quot;,
+        &quot;effort&quot;: &quot;low&quot;,
+        &quot;status&quot;: &quot;skip&quot;,
+        &quot;reason&quot;: &quot;No apm.yml found — skipping lockfile check.&quot;
+      },
+      {
+        &quot;id&quot;: &quot;apm-ci-integration&quot;,
+        &quot;title&quot;: &quot;APM integrated in CI pipeline&quot;,
+        &quot;pillar&quot;: &quot;ai-tooling&quot;,
+        &quot;level&quot;: 4,
+        &quot;scope&quot;: &quot;repo&quot;,
+        &quot;impact&quot;: &quot;high&quot;,
+        &quot;effort&quot;: &quot;medium&quot;,
+        &quot;status&quot;: &quot;skip&quot;,
+        &quot;reason&quot;: &quot;No apm.yml found — skipping CI check.&quot;
+      }
+    ],
+    &quot;extras&quot;: [
+      {
+        &quot;id&quot;: &quot;agents-doc&quot;,
+        &quot;title&quot;: &quot;AGENTS.md present&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;Missing AGENTS.md to guide coding agents.&quot;
+      },
+      {
+        &quot;id&quot;: &quot;pr-template&quot;,
+        &quot;title&quot;: &quot;Pull request template present&quot;,
+        &quot;status&quot;: &quot;pass&quot;
+      },
+      {
+        &quot;id&quot;: &quot;pre-commit&quot;,
+        &quot;title&quot;: &quot;Pre-commit hooks configured&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;Missing pre-commit or Husky configuration for fast feedback.&quot;
+      },
+      {
+        &quot;id&quot;: &quot;architecture-doc&quot;,
+        &quot;title&quot;: &quot;Architecture guide present&quot;,
+        &quot;status&quot;: &quot;fail&quot;,
+        &quot;reason&quot;: &quot;Missing architecture documentation.&quot;
+      }
+    ]
+  }
+}</pre>
+    </details>
+    <script type="application/json" id="raw-data">{"ok":true,"status":"success","data":{"repoPath":"C:\\Users\\Bomj\\RuPochta\\RuPochta\\copilot-worktrees\\RuPochta\\lmcorp-it-urban-winner","generatedAt":"2026-08-06T21:06:55.287Z","isMonorepo":false,"apps":[],"pillars":[{"id":"style-validation","name":"Style & Validation","passed":0,"total":2,"passRate":0},{"id":"build-system","name":"Build System","passed":1,"total":1,"passRate":1},{"id":"testing","name":"Testing","passed":0,"total":0,"passRate":0},{"id":"documentation","name":"Documentation","passed":2,"total":2,"passRate":1},{"id":"dev-environment","name":"Dev Environment","passed":0,"total":2,"passRate":0},{"id":"code-quality","name":"Code Quality","passed":0,"total":1,"passRate":0},{"id":"observability","name":"Observability","passed":0,"total":1,"passRate":0},{"id":"security-governance","name":"Security & Governance","passed":2,"total":4,"passRate":0.5},{"id":"ai-tooling","name":"AI Tooling","passed":0,"total":5,"passRate":0}],"levels":[{"level":1,"name":"Functional","passed":2,"total":5,"passRate":0.4,"achieved":false},{"level":2,"name":"Documented","passed":2,"total":8,"passRate":0.25,"achieved":false},{"level":3,"name":"Standardized","passed":1,"total":5,"passRate":0.2,"achieved":false},{"level":4,"name":"Optimized","passed":0,"total":0,"passRate":0,"achieved":false},{"level":5,"name":"Autonomous","passed":0,"total":0,"passRate":0,"achieved":false}],"achievedLevel":0,"criteria":[{"id":"lint-config","title":"Linting configured","pillar":"style-validation","level":1,"scope":"repo","impact":"high","effort":"low","status":"fail","reason":"Missing ESLint/Biome/Prettier configuration.","evidence":["eslint.config.js",".eslintrc","biome.json",".prettierrc"]},{"id":"typecheck-config","title":"Type checking configured","pillar":"style-validation","level":2,"scope":"repo","impact":"medium","effort":"low","status":"fail","reason":"Missing type checking config (tsconfig or equivalent).","evidence":["tsconfig.json","pyproject.toml","mypy.ini"]},{"id":"build-script","title":"Build script present","pillar":"build-system","level":1,"scope":"app","impact":"high","effort":"low","status":"skip","reason":"No application packages detected."},{"id":"ci-config","title":"CI workflow configured","pillar":"build-system","level":2,"scope":"repo","impact":"high","effort":"medium","status":"pass","evidence":[".github/workflows"]},{"id":"test-script","title":"Test script present","pillar":"testing","level":1,"scope":"app","impact":"high","effort":"low","status":"skip","reason":"No application packages detected."},{"id":"readme","title":"README present","pillar":"documentation","level":1,"scope":"repo","impact":"high","effort":"low","status":"pass","evidence":["README.md"]},{"id":"contributing","title":"CONTRIBUTING guide present","pillar":"documentation","level":2,"scope":"repo","impact":"medium","effort":"low","status":"pass"},{"id":"lockfile","title":"Lockfile present","pillar":"dev-environment","level":1,"scope":"repo","impact":"high","effort":"low","status":"fail","reason":"Missing package manager lockfile."},{"id":"env-example","title":"Environment example present","pillar":"dev-environment","level":2,"scope":"repo","impact":"medium","effort":"low","status":"fail","reason":"Missing .env.example or .env.sample for setup guidance."},{"id":"format-config","title":"Formatter configured","pillar":"code-quality","level":2,"scope":"repo","impact":"medium","effort":"low","status":"fail","reason":"Missing Prettier/Biome formatting config."},{"id":"codeowners","title":"CODEOWNERS present","pillar":"security-governance","level":2,"scope":"repo","impact":"medium","effort":"low","status":"fail","reason":"Missing CODEOWNERS file."},{"id":"license","title":"LICENSE present","pillar":"security-governance","level":1,"scope":"repo","impact":"medium","effort":"low","status":"pass"},{"id":"security-policy","title":"Security policy present","pillar":"security-governance","level":3,"scope":"repo","impact":"high","effort":"low","status":"pass"},{"id":"dependabot","title":"Dependabot configured","pillar":"security-governance","level":3,"scope":"repo","impact":"medium","effort":"medium","status":"fail","reason":"Missing .github/dependabot.yml configuration."},{"id":"observability","title":"Observability tooling present","pillar":"observability","level":3,"scope":"repo","impact":"medium","effort":"medium","status":"fail","reason":"No observability dependencies detected (OpenTelemetry/logging)."},{"id":"custom-instructions","title":"Custom instructions or agent guidance","pillar":"ai-tooling","level":1,"scope":"repo","impact":"high","effort":"low","status":"fail","reason":"Missing custom instructions (e.g. copilot-instructions.md, CLAUDE.md, AGENTS.md, .cursorrules).","evidence":["copilot-instructions.md","CLAUDE.md","AGENTS.md",".cursorrules",".github/copilot-instructions.md"]},{"id":"instructions-consistency","title":"AI instruction files are consistent","pillar":"ai-tooling","level":2,"scope":"repo","impact":"medium","effort":"low","status":"skip","reason":"Fewer than 2 instruction files found."},{"id":"mcp-config","title":"MCP configuration present","pillar":"ai-tooling","level":2,"scope":"repo","impact":"high","effort":"low","status":"fail","reason":"Missing MCP (Model Context Protocol) configuration (e.g. .vscode/mcp.json).","evidence":[".vscode/mcp.json",".vscode/settings.json (mcp section)","mcp.json"]},{"id":"custom-agents","title":"Custom AI agents configured","pillar":"ai-tooling","level":3,"scope":"repo","impact":"medium","effort":"medium","status":"fail","reason":"No custom AI agents configured (e.g. .github/agents/, .copilot/agents/).","evidence":[".github/agents/",".copilot/agents/",".github/copilot/agents/"]},{"id":"copilot-skills","title":"Copilot/Claude skills present","pillar":"ai-tooling","level":3,"scope":"repo","impact":"medium","effort":"medium","status":"fail","reason":"No Copilot or Claude skills found (e.g. .copilot/skills/, .github/skills/).","evidence":[".copilot/skills/",".github/skills/",".claude/skills/"]},{"id":"apm-config","title":"APM package manifest present","pillar":"ai-tooling","level":2,"scope":"repo","impact":"medium","effort":"low","status":"fail","reason":"No apm.yml found. Use APM to install shared agent packages and keep instructions in sync across repos. See: https://github.com/microsoft/apm","evidence":["apm.yml"]},{"id":"apm-locked-deps","title":"APM dependencies locked","pillar":"ai-tooling","level":3,"scope":"repo","impact":"medium","effort":"low","status":"skip","reason":"No apm.yml found — skipping lockfile check."},{"id":"apm-ci-integration","title":"APM integrated in CI pipeline","pillar":"ai-tooling","level":4,"scope":"repo","impact":"high","effort":"medium","status":"skip","reason":"No apm.yml found — skipping CI check."}],"extras":[{"id":"agents-doc","title":"AGENTS.md present","status":"fail","reason":"Missing AGENTS.md to guide coding agents."},{"id":"pr-template","title":"Pull request template present","status":"pass"},{"id":"pre-commit","title":"Pre-commit hooks configured","status":"fail","reason":"Missing pre-commit or Husky configuration for fast feedback."},{"id":"architecture-doc","title":"Architecture guide present","status":"fail","reason":"Missing architecture documentation."}]}}</script>
+  </main>
+
+  <footer>
+    Generated by <a href="https://github.com/github/awesome-copilot/tree/main/plugins/acreadiness-cockpit">acreadiness-cockpit</a>
+    · powered by <a href="https://github.com/microsoft/agentrc">microsoft/agentrc</a>.
+  </footer>
+</body>
+</html>

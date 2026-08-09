@@ -27,6 +27,7 @@ import imaplib
 import ipaddress
 import json
 import logging
+import nh3
 import os
 import re
 import smtplib
@@ -61,9 +62,13 @@ from pydantic import BaseModel, Field
 try:
     from ldap3 import Server, Connection, ALL, SUBTREE, NTLM, SIMPLE
     from ldap3.core.exceptions import LDAPException
+    from ldap3.utils.conv import escape_filter_chars as ldap3_escape_filter_chars
     LDAP_AVAILABLE = True
 except Exception:  # pragma: no cover
     LDAP_AVAILABLE = False
+
+# Import utility modules
+from utils import normalization, errors, database, validation, config as config_utils, authentication, mail_protocol
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +120,7 @@ DIRECTORY_COMPANY_ALIASES = {
 
 
 def _canonical_company(value: Any) -> str:
-    clean = re.sub(r"[\s_-]+", " ", str(value or "").strip().lower()).strip()
+    clean = normalization.normalize_company_name(value)
     return DIRECTORY_COMPANY_ALIASES.get(clean) or DIRECTORY_COMPANY_ALIASES.get(
         clean.replace(" ", ""),
         "",
@@ -127,11 +132,12 @@ def _directory_domain_for_company(value: Any) -> str:
 
 
 def _company_for_directory_domain(value: Any) -> str:
-    domain = str(value or "").strip().lower().rstrip(".")
+    domain = normalization.normalize_domain(value)
     return next(
         (company for company, candidate in DIRECTORY_PROFILES.items() if candidate == domain),
         "",
     )
+
 
 
 def _directory_domain_from_dn(value: Any) -> str:
@@ -151,6 +157,14 @@ class Config:
     SMTP_HOST = os.environ.get("MAIL_SMTP_HOST", os.environ.get("SMTP_HOST", MAIL_HOST))
     SMTP_PORT = int(os.environ.get("MAIL_SMTP_PORT", os.environ.get("SMTP_PORT", "587")))
     SMTP_VERIFY_TLS = os.environ.get("MAIL_SMTP_VERIFY_TLS", "1").strip().lower() not in {
+        "0", "false", "no", "off"
+    }
+    # SEC-001: certificate/hostname verification is on by default for the
+    # managed IMAP endpoint too. Disabling it (MAIL_IMAP_VERIFY_TLS=0) is a
+    # fail-closed, local-dev-only escape hatch — _imap_connect additionally
+    # requires the resolved endpoint to actually be loopback before it will
+    # honor this flag, so a DNS name pointing at a real host can't abuse it.
+    IMAP_VERIFY_TLS = os.environ.get("MAIL_IMAP_VERIFY_TLS", "1").strip().lower() not in {
         "0", "false", "no", "off"
     }
     MAIL_DOMAIN = os.environ.get("MAIL_DOMAIN", "example.com")
@@ -310,6 +324,16 @@ class Config:
     MAILSERVER_MODE = os.environ.get("WEBMAIL_LOCAL_MAILSERVER", "auto").strip().lower()
     RUNTIME_MODE = os.environ.get("WEBMAIL_RUNTIME_MODE", "").strip().lower()
 
+    # Public self-registration (рупочта.рф). Off unless a deployment opts in:
+    # a corporate installation must never grow open signup by upgrading.
+    PUBLIC_SIGNUP = os.environ.get("MAIL_PUBLIC_SIGNUP", "").strip().lower()
+    PUBLIC_SIGNUP_DOMAIN = os.environ.get("MAIL_PUBLIC_SIGNUP_DOMAIN", "").strip().lower()
+    PUBLIC_SIGNUP_MIN_PASSWORD = int(
+        os.environ.get("MAIL_PUBLIC_SIGNUP_MIN_PASSWORD", "10") or 10
+    )
+    PUBLIC_SIGNUP_PER_HOUR = int(os.environ.get("MAIL_PUBLIC_SIGNUP_PER_HOUR", "3") or 3)
+    PUBLIC_SIGNUP_TERMS_URL = os.environ.get("MAIL_PUBLIC_SIGNUP_TERMS_URL", "").strip()
+
 
 CFG = Config()
 
@@ -318,6 +342,118 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 log = logging.getLogger("rupochta")
+
+
+def _host_resolves_to_loopback_only(host: str) -> bool:
+    """SEC-001: true only if every address `host` resolves to is loopback.
+
+    A DNS name is not trustworthy for the insecure-local escape hatch: it can
+    resolve to a public or private address just as easily as 127.0.0.1. We
+    resolve all A/AAAA answers and require every one of them to be loopback.
+    """
+    text = str(host or "").strip()
+    if not text:
+        return False
+    try:
+        addr = ipaddress.ip_address(text)
+        return addr.is_loopback
+    except ValueError:
+        pass
+    try:
+        infos = socket.getaddrinfo(text, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        sockaddr = info[4]
+        ip_text = sockaddr[0] if sockaddr else ""
+        try:
+            if not ipaddress.ip_address(ip_text).is_loopback:
+                return False
+        except ValueError:
+            return False
+    return True
+
+
+# SEC-003: egress policy for user-supplied ("custom"/BYOM) IMAP and SMTP
+# endpoints. Only these ports are reachable without an admin-configured
+# allowlist entry — anything else (22, 80, 2375, 5432, 6379, ...) is refused
+# before a connection is ever attempted.
+_CUSTOM_ENDPOINT_ALLOWED_PORTS = {993, 465, 587}
+
+
+def _custom_endpoint_admin_allowlist() -> List[str]:
+    raw = os.environ.get("MAIL_CUSTOM_ENDPOINT_ALLOWLIST", "")
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _host_is_admin_allowlisted(host: str) -> bool:
+    host_l = str(host or "").strip().lower()
+    if not host_l:
+        return False
+    for entry in _custom_endpoint_admin_allowlist():
+        entry_l = entry.strip().lower()
+        if not entry_l:
+            continue
+        if entry_l == host_l:
+            return True
+        try:
+            network = ipaddress.ip_network(entry_l, strict=False)
+            addr = ipaddress.ip_address(host_l)
+            if addr in network:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _reject_ssrf_targets(host: str, port: int) -> None:
+    """Raise ValueError if a custom mailbox endpoint is an SSRF target.
+
+    Applies to user-supplied (provider="custom") IMAP/SMTP hosts only — known
+    provider presets are fixed, vetted endpoints and never go through here.
+    """
+    host_text = str(host or "").strip()
+    if not host_text:
+        raise ValueError("custom endpoint host is required")
+    port_value = int(port or 0)
+    admin_allowlisted_host = _host_is_admin_allowlisted(host_text)
+    if port_value not in _CUSTOM_ENDPOINT_ALLOWED_PORTS and not admin_allowlisted_host:
+        raise ValueError(f"port {port_value} is not permitted for custom mailbox endpoints")
+    if admin_allowlisted_host:
+        # An administrator explicitly vetted this host/CIDR for a private
+        # corporate endpoint — skip the public-network requirement below.
+        return
+    try:
+        infos = socket.getaddrinfo(host_text, port_value or None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        raise ValueError(f"could not resolve custom endpoint host: {host_text}") from exc
+    if not infos:
+        raise ValueError(f"could not resolve custom endpoint host: {host_text}")
+    for info in infos:
+        sockaddr = info[4]
+        ip_text = sockaddr[0] if sockaddr else ""
+        try:
+            addr = ipaddress.ip_address(ip_text)
+        except ValueError:
+            raise ValueError(f"custom endpoint host resolved to an invalid address: {ip_text}")
+        if (
+            addr.is_loopback
+            or addr.is_private
+            or addr.is_link_local
+            or addr.is_multicast
+            or addr.is_reserved
+            or addr.is_unspecified
+        ):
+            raise ValueError(
+                "custom mailbox endpoint resolves to a private/loopback/reserved address"
+            )
+        # Cloud metadata endpoint (169.254.169.254 is already link-local and
+        # caught above; this also covers the IPv6 metadata alias some clouds
+        # use).
+        if ip_text in {"fd00:ec2::254"}:
+            raise ValueError("custom mailbox endpoint resolves to a metadata address")
 
 
 def _local_mailserver_enabled() -> bool:
@@ -423,6 +559,10 @@ def _sso_external_bindings_init(con: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_sso_external_mailbox_bindings_email "
         "ON sso_external_mailbox_bindings(email)"
     )
+    # Submission endpoint of the external mailbox. Rows written before this
+    # column existed keep NULL and fall back to the provider preset on read.
+    _db_add_column_if_missing(con, "sso_external_mailbox_bindings", "smtp_host", "TEXT")
+    _db_add_column_if_missing(con, "sso_external_mailbox_bindings", "smtp_port", "INTEGER")
     legacy_external = con.execute(
         "SELECT COUNT(*) FROM sso_mailbox_bindings "
         "WHERE imap_host IS NOT NULL "
@@ -680,6 +820,14 @@ def db_init() -> None:
                 "ALTER TABLE scheduled_sends "
                 "ADD COLUMN origin TEXT NOT NULL DEFAULT 'scheduled'"
             )
+        # SEC-005: stored IMAP/SMTP credentials must not outlive the send
+        # attempt they were queued for. Purge any leftover encrypted
+        # passwords on rows that are already in a terminal state (sent or
+        # cancelled) from before this migration existed.
+        con.execute(
+            "UPDATE scheduled_sends SET imap_pass_enc='' "
+            "WHERE status IN ('sent','cancelled') AND imap_pass_enc != ''"
+        )
         # Snooze queue
         con.execute(
             """
@@ -1047,13 +1195,9 @@ def db_audit_query(
         ).fetchall()
         result = []
         for r in rows:
-            d = dict(r)
-            if d.get("details"):
-                try:
-                    d["details"] = json.loads(d["details"])
-                except Exception:
-                    pass
-            d["ok"] = bool(d["ok"])
+            d = database.db_row_to_dict(r)
+            d["details"] = database.db_parse_json_field(d.get("details"))
+            d["ok"] = database.db_bool_from_int(d.get("ok"))
             result.append(d)
         return result, int(total)
 
@@ -1063,10 +1207,10 @@ def db_audit_query_mailbox(
     hours: int = 72,
     limit: int = 250,
 ) -> List[Dict[str, Any]]:
-    target = str(email_addr or "").strip().lower()
+    target = normalization.normalize_email(email_addr)
     if not target:
         return []
-    local = target.split("@", 1)[0] if "@" in target else target
+    local = validation.extract_email_local(target)
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=max(1, int(hours or 72)))).replace(microsecond=0).isoformat()
     params: List[Any] = [
         cutoff,
@@ -1094,19 +1238,15 @@ def db_audit_query_mailbox(
         rows = con.execute(query, params).fetchall()
     result: List[Dict[str, Any]] = []
     for row in rows:
-        data = dict(row)
-        if data.get("details"):
-            try:
-                data["details"] = json.loads(data["details"])
-            except Exception:
-                pass
-        data["ok"] = bool(data.get("ok"))
+        data = database.db_row_to_dict(row)
+        data["details"] = database.db_parse_json_field(data.get("details"))
+        data["ok"] = database.db_bool_from_int(data.get("ok"))
         result.append(data)
     return result
 
 
 def db_get_mailbox_lifecycle(email_addr: str) -> Optional[Dict[str, Any]]:
-    target = str(email_addr or "").strip().lower()
+    target = normalization.normalize_email(email_addr)
     if not target:
         return None
     with _db_connection() as con:
@@ -1119,9 +1259,9 @@ def db_get_mailbox_lifecycle(email_addr: str) -> Optional[Dict[str, Any]]:
         ).fetchone()
         if not row:
             return None
-        data = dict(row)
-    stored_hash = bool(data.get("suspended_hash"))
-    data["suspended"] = bool(data.get("suspended"))
+        data = database.db_row_to_dict(row)
+    stored_hash = database.db_bool_from_int(data.get("suspended_hash"))
+    data["suspended"] = database.db_bool_from_int(data.get("suspended"))
     data["state"] = "suspended" if data["suspended"] else "active"
     data["has_stored_hash"] = stored_hash
     data.pop("suspended_hash", None)
@@ -1138,10 +1278,10 @@ def db_list_mailbox_lifecycle_states() -> Dict[str, Dict[str, Any]]:
         ).fetchall()
     out: Dict[str, Dict[str, Any]] = {}
     for row in rows:
-        data = dict(row)
-        data["suspended"] = bool(data.get("suspended"))
+        data = database.db_row_to_dict(row)
+        data["suspended"] = database.db_bool_from_int(data.get("suspended"))
         data["state"] = "suspended" if data["suspended"] else "active"
-        out[str(data.get("email") or "").lower()] = data
+        out[normalization.normalize_email(data.get("email") or "")] = data
     return out
 
 
@@ -1151,7 +1291,7 @@ def db_mark_mailbox_suspended(
     admin_user: str,
     reason: str = "",
 ) -> Dict[str, Any]:
-    target = str(email_addr or "").strip().lower()
+    target = normalization.normalize_email(email_addr)
     ts = _utc_now_iso()
     with _db_connection() as con:
         con.execute(
@@ -1177,7 +1317,7 @@ def db_mark_mailbox_suspended(
 
 
 def db_mark_mailbox_restored(email_addr: str, admin_user: str, reason: str = "") -> Dict[str, Any]:
-    target = str(email_addr or "").strip().lower()
+    target = normalization.normalize_email(email_addr)
     ts = _utc_now_iso()
     with _db_connection() as con:
         con.execute(
@@ -1200,7 +1340,7 @@ _mailbox_lifecycle_locks: Dict[str, threading.Lock] = {}
 
 
 def _mailbox_lifecycle_lock(email_addr: str) -> threading.Lock:
-    email = str(email_addr or "").strip().lower()
+    email = normalization.normalize_email(email_addr)
     with _mailbox_lifecycle_locks_guard:
         return _mailbox_lifecycle_locks.setdefault(
             email,
@@ -1492,7 +1632,7 @@ def db_set_user_signature(ad_login: str, signature: str) -> Dict[str, Any]:
 
 
 def db_get_forwarding(imap_user: str) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     with _db_connection() as con:
         con.row_factory = sqlite3.Row
         row = con.execute(
@@ -1515,11 +1655,11 @@ def db_get_forwarding(imap_user: str) -> Dict[str, Any]:
             "updated_at": None,
             "revision": 0,
         }
-    payload = dict(row)
-    payload["enabled"] = bool(payload["enabled"])
-    payload["keep_copy"] = bool(payload["keep_copy"])
-    payload["active"] = bool(payload["active"])
-    payload["revision"] = int(payload["revision"])
+    payload = database.db_row_to_dict(row)
+    payload["enabled"] = database.db_bool_from_int(payload.get("enabled"))
+    payload["keep_copy"] = database.db_bool_from_int(payload.get("keep_copy"))
+    payload["active"] = database.db_bool_from_int(payload.get("active"))
+    payload["revision"] = database.db_int_from_value(payload.get("revision"))
     return payload
 
 
@@ -1529,7 +1669,7 @@ def db_set_forwarding(
     address: str,
     keep_copy: bool,
 ) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     now = datetime.now(timezone.utc).isoformat()
     with _db_connection() as con:
         con.execute(
@@ -1562,7 +1702,7 @@ _sieve_user_locks: Dict[str, Dict[str, Any]] = {}
 
 @contextmanager
 def _sieve_user_lock(imap_user: str):
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     with _sieve_user_locks_guard:
         entry = _sieve_user_locks.get(user)
         if entry is None:
@@ -1591,8 +1731,8 @@ def db_record_forwarding_sync(
     sync_message: str,
     expected_revision: Any = _FORWARDING_REVISION_UNSET,
 ) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
-    message = re.sub(r"[\r\n]+", " ", str(sync_message or "")).strip()[:300]
+    user = normalization.normalize_user(imap_user)
+    message = normalization.normalize_multiline_string(sync_message, max_length=300)
     now = datetime.now(timezone.utc).isoformat()
     with _db_connection() as con:
         if expected_revision is _FORWARDING_REVISION_UNSET:
@@ -1666,7 +1806,7 @@ def _forwarding_public_payload(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def db_get_autoreply(imap_user: str) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     with _db_connection() as con:
         con.row_factory = sqlite3.Row
         row = con.execute(
@@ -1692,11 +1832,11 @@ def db_get_autoreply(imap_user: str) -> Dict[str, Any]:
             "updated_at": None,
             "revision": 0,
         }
-    payload = dict(row)
-    payload["enabled"] = bool(payload["enabled"])
-    payload["repeat_days"] = int(payload["repeat_days"])
-    payload["active"] = bool(payload["active"])
-    payload["revision"] = int(payload["revision"])
+    payload = database.db_row_to_dict(row)
+    payload["enabled"] = database.db_bool_from_int(payload.get("enabled"))
+    payload["repeat_days"] = database.db_int_from_value(payload.get("repeat_days"))
+    payload["active"] = database.db_bool_from_int(payload.get("active"))
+    payload["revision"] = database.db_int_from_value(payload.get("revision"))
     return payload
 
 
@@ -1709,7 +1849,7 @@ def db_set_autoreply(
     end_date: Optional[str],
     repeat_days: int,
 ) -> Dict[str, Any]:
-    user = str(imap_user or "").strip().lower()
+    user = normalization.normalize_user(imap_user)
     now = datetime.now(timezone.utc).isoformat()
     with _db_connection() as con:
         con.execute(
@@ -2091,14 +2231,15 @@ def session_cleanup_loop() -> None:
 # ---------------------------------------------------------------------------
 # We need to store the IMAP password briefly to let a background worker
 # perform SMTP/IMAP operations on the user's behalf (Send Later, Snooze).
-# Uses a derived key from SECRET_KEY env + a per-record salt. AES would be
-# nicer but we want zero extra deps — use Fernet from `cryptography` if
-# installed, else fall back to XOR+HMAC (still far better than plaintext).
+# SEC-008: this MUST fail closed. There is no XOR/HMAC fallback cipher and
+# no fallback to reusing RUPOCHTA_INTERNAL_TOKEN as the encryption key —
+# `cryptography` is a hard dependency (see requirements.txt) and the
+# encryption key is a dedicated secret (WEBMAIL_SECRET_KEY) that must never
+# be shared with the internal-service auth token. If either is missing,
+# encrypt_secret()/decrypt_secret() raise instead of silently degrading to
+# a weaker or absent cipher.
 
-_SECRET_KEY = os.environ.get(
-    "WEBMAIL_SECRET_KEY",
-    os.environ.get("RUPOCHTA_INTERNAL_TOKEN", ""),
-).encode("utf-8")
+_SECRET_KEY = os.environ.get("WEBMAIL_SECRET_KEY", "").strip().encode("utf-8")
 _PREVIOUS_SECRET_KEYS = tuple(
     value.strip().encode("utf-8")
     for value in os.environ.get("WEBMAIL_SECRET_KEY_PREVIOUS", "").split(",")
@@ -2111,11 +2252,22 @@ try:
 except Exception:
     _Fernet = None  # type: ignore
     _FERNET_AVAILABLE = False
-    log.warning("cryptography.Fernet not available — using fallback XOR encryption")
+    log.critical(
+        "cryptography.Fernet not available — stored-secret encryption is "
+        "disabled (no insecure fallback cipher will be used)."
+    )
+
+if not _SECRET_KEY:
+    log.critical(
+        "WEBMAIL_SECRET_KEY is not set — stored-secret encryption is "
+        "disabled. Set WEBMAIL_SECRET_KEY to a dedicated random secret "
+        "(do not reuse RUPOCHTA_INTERNAL_TOKEN) to enable Send Later / "
+        "Snooze / shared-mailbox credential storage."
+    )
 
 
 def _fernet_for_key(key: bytes):
-    if not _FERNET_AVAILABLE or _Fernet is None:
+    if not _FERNET_AVAILABLE or _Fernet is None or not key:
         return None
     import base64 as _b64f
     import hashlib as _hf
@@ -2131,22 +2283,13 @@ def _encrypt_secret_with_key(
     if not plaintext:
         return ""
     fernet = _fernet_for_key(key) if prefer_fernet else None
-    if fernet is not None:
-        return fernet.encrypt(plaintext.encode("utf-8")).decode("ascii")
-    # Fallback: XOR with SHA256-derived keystream + HMAC tag
-    import base64 as _b64f
-    import hashlib as _hf
-    import hmac as _hm
-    data = plaintext.encode("utf-8")
-    # Generate keystream by hashing KEY + counter
-    ks = b""
-    counter = 0
-    while len(ks) < len(data):
-        ks += _hf.sha256(key + counter.to_bytes(4, "big")).digest()
-        counter += 1
-    cipher = bytes(a ^ b for a, b in zip(data, ks[:len(data)]))
-    tag = _hm.new(key, cipher, _hf.sha256).digest()[:16]
-    return "xor$" + _b64f.urlsafe_b64encode(cipher + tag).decode("ascii")
+    if fernet is None:
+        raise RuntimeError(
+            "Cannot encrypt secret: cryptography.Fernet unavailable or "
+            "WEBMAIL_SECRET_KEY is not configured. Refusing to store "
+            "credentials in plaintext or with a weaker fallback cipher."
+        )
+    return fernet.encrypt(plaintext.encode("utf-8")).decode("ascii")
 
 
 def _decrypt_secret_with_keys(
@@ -2156,31 +2299,14 @@ def _decrypt_secret_with_keys(
     if not ciphertext:
         return None, None
     if ciphertext.startswith("xor$"):
-        import base64 as _b64f
-        import hashlib as _hf
-        import hmac as _hm
-        try:
-            raw = _b64f.urlsafe_b64decode(ciphertext[4:].encode("ascii"))
-            if len(raw) < 16:
-                return None, None
-            cipher, tag = raw[:-16], raw[-16:]
-            for index, key in enumerate(keys):
-                want_tag = _hm.new(key, cipher, _hf.sha256).digest()[:16]
-                if not _hm.compare_digest(want_tag, tag):
-                    continue
-                ks = b""
-                counter = 0
-                while len(ks) < len(cipher):
-                    ks += _hf.sha256(
-                        key + counter.to_bytes(4, "big")
-                    ).digest()
-                    counter += 1
-                plaintext = bytes(
-                    a ^ b for a, b in zip(cipher, ks[:len(cipher)])
-                ).decode("utf-8")
-                return plaintext, index
-        except Exception:
-            return None, None
+        # Legacy ciphertext from a previous version's XOR+HMAC fallback.
+        # That fallback has been removed (SEC-008); such rows can no longer
+        # be decrypted and must be treated as unrecoverable/expired.
+        log.warning(
+            "Encountered legacy xor$-prefixed ciphertext; the insecure "
+            "XOR fallback cipher has been removed and this value cannot "
+            "be decrypted."
+        )
         return None, None
     if _FERNET_AVAILABLE:
         for index, key in enumerate(keys):
@@ -2195,6 +2321,7 @@ def _decrypt_secret_with_keys(
             except Exception:
                 continue
     return None, None
+
 
 
 _SQLITE_SECRET_COLUMNS = (
@@ -2225,13 +2352,13 @@ def _migrate_sqlite_secrets(
                 continue
             columns = {
                 str(row[1])
-                for row in con.execute(f"PRAGMA table_info({table})").fetchall()
+                for row in con.execute(f"PRAGMA table_info([{table}])").fetchall()
             }
             if column not in columns:
                 continue
             rows = con.execute(
-                f"SELECT rowid, {column} FROM {table} "
-                f"WHERE {column} IS NOT NULL AND {column} != ''"
+                f"SELECT rowid, [{column}] FROM [{table}] "
+                f"WHERE [{column}] IS NOT NULL AND [{column}] != ''"
             ).fetchall()
             for rowid, ciphertext in rows:
                 plaintext, key_index = _decrypt_secret_with_keys(
@@ -2250,7 +2377,7 @@ def _migrate_sqlite_secrets(
                     continue
                 replacement = _encrypt_secret_with_key(plaintext, current_key)
                 con.execute(
-                    f"UPDATE {table} SET {column}=? WHERE rowid=?",
+                    f"UPDATE [{table}] SET [{column}]=? WHERE rowid=?",
                     (replacement, rowid),
                 )
                 migrated += 1
@@ -2350,6 +2477,8 @@ def _sso_bindings_put(
     imap_host: Optional[str] = None,
     imap_port: Optional[int] = None,
     provider: Optional[str] = None,
+    smtp_host: Optional[str] = None,
+    smtp_port: Optional[int] = None,
 ) -> int:
     subject_hashes = list(dict.fromkeys(
         value for value in (_sso_binding_subject_hash(subject) for subject in subjects) if value
@@ -2364,29 +2493,44 @@ def _sso_bindings_put(
     host_value = str(imap_host or "").strip() or None
     port_value = int(imap_port) if imap_port else None
     provider_value = str(provider or "").strip() or None
+    smtp_host_value = str(smtp_host or "").strip() or None
+    smtp_port_value = int(smtp_port) if smtp_port else None
     external = bool(host_value)
     if external and (not port_value or not provider_value):
         raise ValueError("external sso binding requires endpoint and provider")
+    if smtp_host_value and not smtp_port_value:
+        raise ValueError("smtp_host requires smtp_port")
     table = (
         "sso_external_mailbox_bindings"
         if external
         else "sso_mailbox_bindings"
     )
+    # The submission endpoint only exists on the external table: a managed
+    # mailbox always submits through the deployment's own SMTP.
+    smtp_columns = ", smtp_host, smtp_port" if external else ""
+    smtp_values = ", ?, ?" if external else ""
+    smtp_updates = (
+        ",\n                smtp_host = excluded.smtp_host,"
+        "\n                smtp_port = excluded.smtp_port"
+        if external
+        else ""
+    )
+    smtp_row = (smtp_host_value, smtp_port_value) if external else ()
     with _db_connection() as con:
         con.executemany(
             f"""
             INSERT INTO {table} (
                 subject_hash, email, imap_pass_enc, created_at, updated_at,
-                imap_host, imap_port, provider
+                imap_host, imap_port, provider{smtp_columns}
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?{smtp_values})
             ON CONFLICT(subject_hash) DO UPDATE SET
                 email = excluded.email,
                 imap_pass_enc = excluded.imap_pass_enc,
                 updated_at = excluded.updated_at,
                 imap_host = excluded.imap_host,
                 imap_port = excluded.imap_port,
-                provider = excluded.provider
+                provider = excluded.provider{smtp_updates}
             """,
             [
                 (
@@ -2398,7 +2542,7 @@ def _sso_bindings_put(
                     host_value,
                     port_value,
                     provider_value,
-                )
+                ) + smtp_row
                 for subject_hash in subject_hashes
             ],
         )
@@ -2412,6 +2556,8 @@ def _sso_binding_put(
     imap_host: Optional[str] = None,
     imap_port: Optional[int] = None,
     provider: Optional[str] = None,
+    smtp_host: Optional[str] = None,
+    smtp_port: Optional[int] = None,
 ) -> None:
     _sso_bindings_put(
         [subject],
@@ -2420,6 +2566,8 @@ def _sso_binding_put(
         imap_host=imap_host,
         imap_port=imap_port,
         provider=provider,
+        smtp_host=smtp_host,
+        smtp_port=smtp_port,
     )
 
 
@@ -2471,8 +2619,37 @@ def _resolve_provider_hosts(
         port = int(request_imap_port) if request_imap_port else None
         if not host or not port:
             raise ValueError("custom provider requires imap_host and imap_port")
+        _reject_ssrf_targets(host, port)
         return host, port
     return str(preset["imap_host"]), int(preset["imap_port"])
+
+
+def _resolve_provider_smtp(
+    provider: Optional[str],
+    request_smtp_host: Optional[str] = None,
+    request_smtp_port: Optional[int] = None,
+) -> Tuple[Optional[str], Optional[int]]:
+    """Return the submission host/port for a provider preset.
+
+    Mirrors _resolve_provider_hosts. A custom provider may omit the submission
+    endpoint: without it the deployment's own SMTP is used, which is the old
+    behaviour and stays valid for a mailbox relayed locally.
+    """
+    provider_value = str(provider or "").strip().lower()
+    if not provider_value:
+        return None, None
+    preset = MAIL_PROVIDER_PRESETS.get(provider_value)
+    if not preset:
+        raise ValueError(f"unknown provider: {provider_value}")
+    if provider_value == "custom":
+        host = str(request_smtp_host or "").strip() or None
+        port = int(request_smtp_port) if request_smtp_port else None
+        if host and not port:
+            raise ValueError("custom smtp_host requires smtp_port")
+        if host and port:
+            _reject_ssrf_targets(host, port)
+        return (host, port) if host else (None, None)
+    return str(preset["smtp_host"]), int(preset["smtp_port"])
 
 
 def _sso_bindings_drop_external(subjects, provider: str) -> int:
@@ -2491,6 +2668,59 @@ def _sso_bindings_drop_external(subjects, provider: str) -> int:
             (*subject_hashes, provider_value),
         )
         return int(cur.rowcount or 0)
+
+
+def _mailbox_external_row(email: str) -> Optional[Tuple[Any, ...]]:
+    """Return the external binding row for this mailbox address, or None."""
+    normalized = str(email or "").strip().lower()
+    if not normalized:
+        return None
+    with _db_connection() as con:
+        return con.execute(
+            "SELECT imap_host, imap_port, smtp_host, smtp_port, provider "
+            "FROM sso_external_mailbox_bindings WHERE email = ? "
+            "ORDER BY updated_at DESC LIMIT 1",
+            (normalized,),
+        ).fetchone()
+
+
+def _mailbox_imap_endpoint(email: str) -> Tuple[Optional[str], Optional[int]]:
+    """Return the IMAP host/port bound to this mailbox address, or (None, None).
+
+    Every IMAP caller routes through _imap_connect, so resolving the endpoint
+    there is what keeps browsing, search and the sent-copy append pointed at the
+    mailbox the user actually signed in with.
+    """
+    row = _mailbox_external_row(email)
+    if not row:
+        return None, None
+    host = str(row[0] or "").strip() or None
+    port = int(row[1]) if row[1] else None
+    return (host, port) if host and port else (None, None)
+
+
+def _mailbox_submission_endpoint(email: str) -> Tuple[Optional[str], Optional[int]]:
+    """Return the SMTP host/port bound to this mailbox address, or (None, None).
+
+    A managed mailbox has no external binding and submits through the
+    deployment's own SMTP. An external mailbox (ADR-0071) must submit through
+    its own provider: sending a Mail.ru address through the local relay is
+    refused by every receiving side, so the endpoint has to follow the mailbox.
+
+    Rows written before the smtp_* columns existed fall back to the provider
+    preset, which is where the values came from in the first place.
+    """
+    row = _mailbox_external_row(email)
+    if not row:
+        return None, None
+    host = str(row[2] or "").strip() or None
+    port = int(row[3]) if row[3] else None
+    if host and port:
+        return host, port
+    try:
+        return _resolve_provider_smtp(str(row[4] or "") or None)
+    except ValueError:
+        return None, None
 
 
 def _sso_binding_lookup(
@@ -2686,13 +2916,24 @@ def _imap_connect(
     host: Optional[str] = None,
     port: Optional[int] = None,
 ) -> imaplib.IMAP4_SSL:
-    # An explicit host/port overrides the global SpaceWeb config. BYOM external
-    # mailboxes (ADR-0071) are on different IMAP servers; managed @example.com
-    # mailboxes pass None and hit the default.
+    # An explicit host/port overrides the global config. BYOM external
+    # mailboxes (ADR-0071) are on different IMAP servers; managed mailboxes
+    # resolve to nothing here and hit the default.
+    if not (host or port):
+        host, port = _mailbox_imap_endpoint(user)
     imap_host = str(host or "").strip() or CFG.IMAP_HOST
     imap_port = int(port) if port else CFG.IMAP_PORT
     ctx = ssl.create_default_context()
-    if not (host or port):
+    # SEC-001: certificate/hostname verification stays on by default for every
+    # endpoint, managed or BYOM. The only opt-out is an explicit local-dev
+    # flag (MAIL_IMAP_VERIFY_TLS=0), and even then only when the endpoint
+    # actually resolves to loopback — a DNS name resolving to a real host must
+    # never bypass verification.
+    if (
+        not (host or port)
+        and not getattr(CFG, "IMAP_VERIFY_TLS", True)
+        and _host_resolves_to_loopback_only(imap_host)
+    ):
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
     direct_error: Optional[Exception] = None
@@ -3342,18 +3583,59 @@ def imap_search_messages(
         return {"messages": messages, "total": total, "query": query, "limit": limit}
 
 
-_SCRIPT_RE = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
-_EVENT_RE = re.compile(r"\son\w+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]*)", re.IGNORECASE)
-_JS_HREF_RE = re.compile(r"(href|src)\s*=\s*([\"'])\s*javascript:[^\"']*\2", re.IGNORECASE)
+_SANITIZE_ALLOWED_TAGS = {
+    "a", "b", "strong", "i", "em", "u", "s", "strike", "p", "br", "div", "span",
+    "ul", "ol", "li", "blockquote", "pre", "code",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+    "table", "thead", "tbody", "tfoot", "tr", "td", "th",
+    "img", "hr", "sub", "sup", "small", "font",
+}
+_SANITIZE_ALLOWED_ATTRIBUTES = {
+    "a": {"href", "title"},
+    "img": {"src", "alt", "width", "height"},
+    "td": {"colspan", "rowspan", "align", "valign"},
+    "th": {"colspan", "rowspan", "align", "valign"},
+    "table": {"cellpadding", "cellspacing", "border"},
+    "font": {"color", "size", "face"},
+}
+# Only https, mailto and our own cid: (inline attachment) references are
+# ever allowed as a URL — javascript:, data:, file: and any other scheme are
+# stripped by nh3 before we see the result.
+_SANITIZE_URL_SCHEMES = {"https", "mailto", "cid"}
+# These tags — and everything nested inside them — are removed entirely
+# rather than unwrapped, so `<script>...</script>`, `<style>...</style>` and
+# an `<iframe srcdoc="...">` payload can never leak their inner text either.
+_SANITIZE_CLEAN_CONTENT_TAGS = {
+    "script", "style", "iframe", "object", "embed", "form", "svg", "math",
+    "noscript", "base", "meta", "template",
+}
+_REMOTE_IMG_SRC_RE = re.compile(r'(<img\b[^>]*?)\ssrc="(https?://[^"]*)"', re.IGNORECASE)
 
 
 def sanitize_html(content: str) -> str:
+    """Sanitize incoming HTML mail with a real parser-based allowlist.
+
+    Replaces the old regex-only filter (SEC-002): a regex cannot model an
+    HTML5 parser, so it missed iframe/srcdoc, object/embed, SVG, malformed
+    tags and encoded-entity bypasses. nh3 parses the document like a browser
+    would and only re-serializes the allow-listed tags/attributes/schemes.
+
+    Remote (http/https) images are blocked by default — the src is preserved
+    as data-blocked-src so the client can offer an explicit "load images"
+    action, closing the tracking-pixel / same-origin-probe vector.
+    """
     if not content:
         return ""
-    content = _SCRIPT_RE.sub("", content)
-    content = _EVENT_RE.sub("", content)
-    content = _JS_HREF_RE.sub(r'\1=\2#\2', content)
-    return content
+    cleaned = nh3.clean(
+        content,
+        tags=_SANITIZE_ALLOWED_TAGS,
+        attributes=_SANITIZE_ALLOWED_ATTRIBUTES,
+        url_schemes=_SANITIZE_URL_SCHEMES,
+        link_rel="noopener noreferrer nofollow",
+        clean_content_tags=_SANITIZE_CLEAN_CONTENT_TAGS,
+    )
+    cleaned = _REMOTE_IMG_SRC_RE.sub(r'\1 data-blocked-src="\2"', cleaned)
+    return cleaned
 
 
 def _ical_unescape(value: str) -> str:
@@ -3915,20 +4197,35 @@ def smtp_send(
     recipients = [r for r in (to + cc + bcc) if r]
     raw = msg.as_bytes()
 
-    # Certificates are verified by default. Only a deployment whose submission
-    # host is a local relay with a self-signed certificate may opt out, and it
-    # has to say so explicitly — an unverified TLS session to a remote provider
-    # would expose the mailbox password this call is about to send.
+    # An external mailbox submits through its own provider; a managed one keeps
+    # the deployment's SMTP.
+    bound_host, bound_port = _mailbox_submission_endpoint(user)
+    smtp_host = bound_host or CFG.SMTP_HOST
+    smtp_port = bound_port or CFG.SMTP_PORT
+    external = bool(bound_host)
+
+    # Certificates are verified by default. Only a deployment whose own
+    # submission host is a local relay with a self-signed certificate may opt
+    # out — an unverified TLS session to a remote provider would expose the
+    # mailbox password this call is about to send, so the opt-out never applies
+    # to an external endpoint.
     ctx = ssl.create_default_context()
-    if not CFG.SMTP_VERIFY_TLS:
+    if not CFG.SMTP_VERIFY_TLS and not external:
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-    with smtplib.SMTP(CFG.SMTP_HOST, CFG.SMTP_PORT, timeout=20) as s:
-        s.ehlo()
-        s.starttls(context=ctx)
-        s.ehlo()
-        s.login(user, password)
-        s.send_message(msg, from_addr=from_addr, to_addrs=recipients)
+
+    # Port 465 is implicit TLS, everything else is STARTTLS on a plain session.
+    if smtp_port == 465:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, context=ctx, timeout=20) as s:
+            s.login(user, password)
+            s.send_message(msg, from_addr=from_addr, to_addrs=recipients)
+    else:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as s:
+            s.ehlo()
+            s.starttls(context=ctx)
+            s.ehlo()
+            s.login(user, password)
+            s.send_message(msg, from_addr=from_addr, to_addrs=recipients)
     result = {
         "smtp_ok": True,
         "smtp_status": "submitted",
@@ -4113,10 +4410,9 @@ def _deliver_scheduled_send_row(
     with _db_connection() as con:
         con.execute(
             "UPDATE scheduled_sends SET status='sent', sent_at=?, "
-            "imap_pass_enc=?, last_error=NULL WHERE id=?",
+            "imap_pass_enc='', last_error=NULL WHERE id=?",
             (
                 now_iso,
-                encrypt_secret(imap_pass) or "",
                 row_id,
             ),
         )
@@ -5059,7 +5355,7 @@ def ldap_get_user_photo(login: str) -> Optional[bytes]:
 def ldap_get_user_displayname(login: str) -> str:
     if not _ldap_bind_available():
         return login
-    safe = re.sub(r"[()\\*\x00]", "", login)
+    safe = ldap3_escape_filter_chars(login)
     flt = f"(&(objectClass=user)(sAMAccountName={safe}))"
     for srv_url in CFG.LDAP_SERVERS:
         try:
@@ -5139,6 +5435,9 @@ class SendBody(BaseModel):
     folder: Optional[str] = None
     in_reply_to: Optional[str] = None
     draft_uid: Optional[str] = None
+    # Send-later reuses this body; without the field pydantic drops it and
+    # /api/scheduled/send can never see a delivery time.
+    scheduled_at: Optional[str] = None
 
 
 class MoveBody(BaseModel):
@@ -6479,6 +6778,7 @@ async def _parse_compose_request(request: Request, draft_mode: bool = False) -> 
         "in_reply_to": form.get("in_reply_to") or None,
         "replace_uid": form.get("replace_uid") or None,
         "draft_uid": form.get("draft_uid") or None,
+        "scheduled_at": form.get("scheduled_at") or None,
         "attachments": [],
     }
     for _, item in form.multi_items():
@@ -6495,6 +6795,7 @@ async def _parse_compose_request(request: Request, draft_mode: bool = False) -> 
         payload.pop("replace_uid", None)
     else:
         payload.pop("draft_uid", None)
+        payload.pop("scheduled_at", None)
     return payload
 
 
@@ -6529,10 +6830,20 @@ def _worker_process_scheduled_sends() -> int:
                 ).fetchone()
                 attempts = int(current[0]) if current else 0
                 status = "failed" if attempts >= 3 else "pending"
-                con.execute(
-                    "UPDATE scheduled_sends SET status=?, last_error=? WHERE id=?",
-                    (status, str(e)[:500], row_id),
-                )
+                if status == "failed":
+                    # SEC-005: no more automatic retries will use the stored
+                    # credential — a user-initiated retry re-supplies the
+                    # password from their live session, so drop it now.
+                    con.execute(
+                        "UPDATE scheduled_sends SET status=?, last_error=?, "
+                        "imap_pass_enc='' WHERE id=?",
+                        (status, str(e)[:500], row_id),
+                    )
+                else:
+                    con.execute(
+                        "UPDATE scheduled_sends SET status=?, last_error=? WHERE id=?",
+                        (status, str(e)[:500], row_id),
+                    )
                 con.commit()
             continue
         log.info("scheduled send id=%s sent to %s", row_id, row["to_list"][:200])
@@ -11511,6 +11822,7 @@ def _managesieve_put_script(user: str, password: str, script: str) -> Tuple[bool
         ctx = _ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = _ssl.CERT_NONE
+        ctx.minimum_version = _ssl.TLSVersion.TLSv1_2
 
         def _recv_until(buf_state: Dict[str, bytes]) -> List[str]:
             """Read response lines until we see OK/NO/BYE."""
@@ -13600,8 +13912,13 @@ class AdminSsoBindingBody(BaseModel):
     imap_host: Optional[str] = None
     imap_port: Optional[int] = None
     provider: Optional[str] = None
+    # Submission endpoint of the same mailbox: an external address has to be
+    # sent through its own provider, not through the local relay.
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
     # For known providers the host/port are taken from MAIL_PROVIDER_PRESETS.
-    # For "custom" the caller must supply imap_host and imap_port.
+    # For "custom" the caller must supply imap_host and imap_port; the
+    # submission endpoint is optional and falls back to the deployment's SMTP.
 
 
 class AdminSsoBindingsBody(BaseModel):
@@ -13611,6 +13928,8 @@ class AdminSsoBindingsBody(BaseModel):
     imap_host: Optional[str] = None
     imap_port: Optional[int] = None
     provider: Optional[str] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
 
 
 class AdminSsoBindingStatusBody(BaseModel):
@@ -15198,6 +15517,9 @@ async def api_admin_sso_binding(body: AdminSsoBindingBody, request: Request):
         imap_host, imap_port = _resolve_provider_hosts(
             provider, body.imap_host, body.imap_port
         )
+        smtp_host, smtp_port = _resolve_provider_smtp(
+            provider, body.smtp_host, body.smtp_port
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if imap_host:
@@ -15230,6 +15552,8 @@ async def api_admin_sso_binding(body: AdminSsoBindingBody, request: Request):
                 imap_host=imap_host,
                 imap_port=imap_port,
                 provider=provider,
+                smtp_host=smtp_host,
+                smtp_port=smtp_port,
             ),
         )
     except ValueError as exc:
@@ -15265,6 +15589,9 @@ async def api_admin_sso_binding_bulk(
         imap_host, imap_port = _resolve_provider_hosts(
             provider, body.imap_host, body.imap_port
         )
+        smtp_host, smtp_port = _resolve_provider_smtp(
+            provider, body.smtp_host, body.smtp_port
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not imap_host or not imap_port or not 1 <= imap_port <= 65535:
@@ -15293,6 +15620,8 @@ async def api_admin_sso_binding_bulk(
             imap_host=imap_host,
             imap_port=imap_port,
             provider=provider,
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
         ),
     )
     return {
@@ -15317,6 +15646,136 @@ async def api_admin_sso_binding_providers(request: Request):
             for key, value in MAIL_PROVIDER_PRESETS.items()
         ],
     }
+
+
+class ExternalMailboxBody(BaseModel):
+    """A signed-in user connecting their own external mailbox."""
+
+    provider: str = ""
+    email: str = ""
+    password: str = ""
+    imap_host: Optional[str] = None
+    imap_port: Optional[int] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+
+
+def _external_mailbox_subject(request: Request) -> Tuple[Dict[str, Any], str]:
+    """Return the session and its login subject, or refuse.
+
+    The binding is keyed by the central-auth subject, so a mailbox connected
+    with a password login would have nothing to attach to.
+    """
+    sess = get_session_or_401(request)
+    subject = _mail_sso_subject(sess.get("sso_subject"))
+    if not subject:
+        raise HTTPException(
+            status_code=409,
+            detail="подключение внешнего ящика доступно после входа через SSO",
+        )
+    return sess, subject
+
+
+@app.get("/api/mailbox/external")
+async def api_external_mailbox_state(request: Request):
+    """Return the caller's own external mailbox state and the provider presets."""
+    sess = get_session_or_401(request)
+    subject = _mail_sso_subject(sess.get("sso_subject"))
+    loop = asyncio.get_event_loop()
+    state = (
+        await loop.run_in_executor(None, lambda: _sso_bindings_status([subject]))
+        if subject
+        else {"bound": False, "external": False, "provider": "", "email": "", "conflict": False}
+    )
+    return JSONResponse(
+        {
+            "ok": True,
+            "available": bool(subject),
+            **state,
+            "providers": [
+                {
+                    "id": key,
+                    "name": value["name"],
+                    "imap_host": value["imap_host"],
+                    "imap_port": value["imap_port"],
+                    "smtp_host": value["smtp_host"],
+                    "smtp_port": value["smtp_port"],
+                }
+                for key, value in MAIL_PROVIDER_PRESETS.items()
+            ],
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/mailbox/external")
+async def api_external_mailbox_connect(body: ExternalMailboxBody, request: Request):
+    """Connect an external mailbox to the caller's own login."""
+    _sess, subject = _external_mailbox_subject(request)
+    provider = str(body.provider or "").strip().lower()
+    if not provider or provider not in MAIL_PROVIDER_PRESETS:
+        raise HTTPException(status_code=400, detail="неизвестный почтовый сервис")
+    email = str(body.email or "").strip().lower()
+    if not email or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise HTTPException(status_code=400, detail="укажите адрес ящика целиком")
+    if not str(body.password or ""):
+        raise HTTPException(status_code=400, detail="укажите пароль приложения")
+    try:
+        imap_host, imap_port = _resolve_provider_hosts(
+            provider, body.imap_host, body.imap_port
+        )
+        smtp_host, smtp_port = _resolve_provider_smtp(
+            provider, body.smtp_host, body.smtp_port
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    loop = asyncio.get_event_loop()
+    # Prove the credentials work before storing them, exactly as the admin path
+    # does: a binding that cannot log in is worse than no binding at all.
+    try:
+        await loop.run_in_executor(
+            None,
+            lambda: _imap_connect(
+                email, str(body.password), host=imap_host, port=imap_port
+            ).logout(),
+        )
+    except Exception as exc:
+        log.warning("external mailbox rejected for %s: %s", email, exc)
+        raise _imap_validation_http_error(exc) from exc
+    try:
+        await loop.run_in_executor(
+            None,
+            lambda: _sso_binding_put(
+                subject,
+                email,
+                str(body.password),
+                imap_host=imap_host,
+                imap_port=imap_port,
+                provider=provider,
+                smtp_host=smtp_host,
+                smtp_port=smtp_port,
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "bound": True, "external": True, "provider": provider, "email": email}
+
+
+@app.delete("/api/mailbox/external")
+async def api_external_mailbox_disconnect(request: Request):
+    """Disconnect the caller's external mailbox, keeping the managed one."""
+    _sess, subject = _external_mailbox_subject(request)
+    loop = asyncio.get_event_loop()
+    state = await loop.run_in_executor(None, lambda: _sso_bindings_status([subject]))
+    provider = str(state.get("provider") or "").strip().lower()
+    if not provider:
+        return {"ok": True, "bound": False, "removed": False}
+    # The drop stays provider-scoped: disconnecting an external mailbox must
+    # leave the managed binding alone (ADR-0072).
+    removed = await loop.run_in_executor(
+        None, lambda: _sso_bindings_drop_external([subject], provider)
+    )
+    return {"ok": True, "bound": False, "removed": bool(removed)}
 
 
 @app.post("/api/admin/sso_binding/status")
@@ -15444,63 +15903,23 @@ def _admin_session_get(token: str) -> Optional[Dict[str, Any]]:
 
 
 def _client_ip(request: Request) -> str:
-    """Real client IP as seen by the trusted reverse proxy.
-
-    Prefer X-Real-IP (nginx sets it to $remote_addr — not client-appendable).
-    Fall back to the LAST X-Forwarded-For hop: nginx uses
-    $proxy_add_x_forwarded_for, which *appends* the real peer, so the rightmost
-    entry is the trusted one. The leftmost entry is fully attacker-controlled
-    and must never be used for authorization (it would defeat
-    _is_internal_client_ip).
-    """
-    real_ip = (request.headers.get("x-real-ip") or "").strip()
-    if real_ip:
-        return real_ip
-    xff = request.headers.get("x-forwarded-for", "")
-    if xff:
-        hops = [p.strip() for p in xff.split(",") if p.strip()]
-        if hops:
-            return hops[-1]
-    if request.client:
-        return request.client.host
-    return ""
+    """Real client IP as seen by the trusted reverse proxy."""
+    return authentication.get_client_ip(request)
 
 
 def _request_is_https(request: Request) -> bool:
-    proto = (request.headers.get("x-forwarded-proto") or "").split(",", 1)[0].strip().lower()
-    if proto:
-        return proto == "https"
-    return (request.url.scheme or "").lower() == "https"
+    """Check if request was made over HTTPS."""
+    return authentication.is_request_https(request)
 
 
 def _request_host(request: Request) -> str:
-    forwarded_host = (request.headers.get("x-forwarded-host") or "").split(",", 1)[0].strip()
-    if forwarded_host:
-        return forwarded_host
-    host = (request.headers.get("host") or "").split(",", 1)[0].strip()
-    if host:
-        return host
-    return (request.url.netloc or "").strip()
+    """Extract Host from request headers, handling proxies."""
+    return authentication.get_request_host(request)
 
 
 def _is_internal_client_ip(client_ip: str) -> bool:
-    text = str(client_ip or "").strip()
-    if not text:
-        return False
-    try:
-        addr = ipaddress.ip_address(text)
-    except ValueError:
-        return False
-    internal_networks = (
-        ipaddress.ip_network("127.0.0.0/8"),
-        ipaddress.ip_network("10.0.0.0/8"),
-        ipaddress.ip_network("172.16.0.0/12"),
-        ipaddress.ip_network("192.168.0.0/16"),
-        ipaddress.ip_network("::1/128"),
-        ipaddress.ip_network("fc00::/7"),
-        ipaddress.ip_network("fe80::/10"),
-    )
-    return any(addr in network for network in internal_networks)
+    """Check if IP is in the internal/private range."""
+    return validation.is_internal_client_ip(client_ip)
 
 
 def _ct_eq(provided: str, expected: str) -> bool:
@@ -15541,18 +15960,19 @@ def _require_mail_admin_api_access(request: Request) -> None:
 
 
 def _is_same_origin_admin_request(request: Request) -> bool:
-    expected_host = _request_host(request)
+    """Check if request is same-origin (with fallback to internal IP check)."""
+    expected_host = authentication.get_request_host(request)
     if not expected_host:
-        return _is_internal_client_ip(_client_ip(request))
-    expected_origin = f"{'https' if _request_is_https(request) else 'http'}://{expected_host}"
-    origin = (request.headers.get("origin") or "").split(",", 1)[0].strip()
+        return _is_internal_client_ip(authentication.get_client_ip(request))
+    expected_origin = authentication.build_expected_origin(request)
+    origin = authentication.get_request_origin(request)
     if origin:
         return origin == expected_origin
-    referer = (request.headers.get("referer") or "").strip()
+    referer = authentication.get_request_referer(request)
     if referer:
         return referer == expected_origin or referer.startswith(expected_origin + "/")
     # Keep internal ops/curl flows working even when browsers omit origin headers.
-    return _is_internal_client_ip(_client_ip(request))
+    return _is_internal_client_ip(authentication.get_client_ip(request))
 
 
 # ---------------------------------------------------------------------------
@@ -17771,6 +18191,232 @@ async def api_calendar_config(request: Request):
         "requires_auth": True,
         "auth_hint": "Используйте тот же пароль, что и для почты.",
     }
+
+
+# ---------------------------------------------------------------------------
+# Public self-registration (рупочта.рф)
+# ---------------------------------------------------------------------------
+# рупочта.рф is the open service anyone may take a mailbox on. Everything below
+# is inert unless MAIL_PUBLIC_SIGNUP is switched on, so a corporate deployment
+# that upgrades never suddenly accepts strangers.
+
+_PUBLIC_SIGNUP_LOCAL_RE = re.compile(r"^[a-z0-9][a-z0-9._\-]{2,29}$")
+_PUBLIC_SIGNUP_WINDOW = int(os.environ.get("MAIL_PUBLIC_SIGNUP_WINDOW", "3600") or 3600)
+
+# Addresses that must stay with the operator: RFC 2142 roles, anything that can
+# be mistaken for the service itself, and the usual abuse magnets.
+_PUBLIC_SIGNUP_RESERVED = frozenset({
+    "abuse", "admin", "administrator", "all", "api", "billing", "ceo", "contact",
+    "dmarc", "dns", "everyone", "ftp", "help", "hostmaster", "imap", "info",
+    "it", "legal", "list", "mail", "mailer-daemon", "mailerdaemon", "manager",
+    "marketing", "master", "news", "noc", "noreply", "no-reply", "notify",
+    "office", "operator", "owner", "postmaster", "president", "press", "root",
+    "sales", "security", "service", "smtp", "spam", "ssl", "staff", "support",
+    "sysadmin", "system", "team", "test", "tls", "usenet", "uucp", "webmaster",
+    "www", "rupochta", "рупочта", "почта",
+})
+
+
+def _public_signup_enabled() -> bool:
+    return str(CFG.PUBLIC_SIGNUP or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _public_signup_domain() -> str:
+    return (CFG.PUBLIC_SIGNUP_DOMAIN or CFG.MAIL_DOMAIN or "").strip().lower()
+
+
+def _public_signup_rate_allow(ip: str) -> bool:
+    """One bucket per client address, counting every attempt, not just failures."""
+    if not ip:
+        return True
+    limit = max(1, int(CFG.PUBLIC_SIGNUP_PER_HOUR or 1))
+    cutoff = time.time() - _PUBLIC_SIGNUP_WINDOW
+    with _rate_lock:
+        bucket = _RATE_BUCKETS.setdefault("public_signup", {})
+        events = [t for t in bucket.get(ip, []) if t > cutoff]
+        bucket[ip] = events
+        return len(events) < limit
+
+
+def _public_signup_rate_record(ip: str) -> None:
+    if not ip:
+        return
+    cutoff = time.time() - _PUBLIC_SIGNUP_WINDOW
+    with _rate_lock:
+        bucket = _RATE_BUCKETS.setdefault("public_signup", {})
+        events = [t for t in bucket.get(ip, []) if t > cutoff]
+        events.append(time.time())
+        bucket[ip] = events
+
+
+def validate_public_signup_login(raw_login: str) -> Tuple[str, str]:
+    """Return (login, error). An empty error means the login may be registered."""
+    login = str(raw_login or "").strip().lower()
+    if "@" in login:
+        # Pasting the whole address is fine, but only for the domain we hand
+        # out: silently turning ivan@gmail.com into ivan@<our domain> would
+        # hand someone an address they did not ask for.
+        local, _, typed_domain = login.partition("@")
+        expected = _public_signup_domain()
+        if typed_domain and expected and typed_domain != expected:
+            return local, f"Регистрация идёт только на домене @{expected}."
+        login = local
+    if not login:
+        return "", "Укажите имя ящика."
+    if not _PUBLIC_SIGNUP_LOCAL_RE.match(login):
+        return login, (
+            "Имя ящика: 3–30 символов, латиница, цифры, точка, дефис "
+            "или подчёркивание; начинается с буквы или цифры."
+        )
+    if ".." in login or login.endswith((".", "-", "_")):
+        return login, "Имя ящика не может заканчиваться разделителем или содержать «..»."
+    if login in _PUBLIC_SIGNUP_RESERVED:
+        return login, "Это имя зарезервировано за службой поддержки сервиса."
+    return login, ""
+
+
+def validate_public_signup_password(password: str, login: str) -> str:
+    """Return an error message, or an empty string when the password is fine."""
+    value = str(password or "")
+    minimum = max(8, int(CFG.PUBLIC_SIGNUP_MIN_PASSWORD or 10))
+    if len(value) < minimum:
+        return f"Пароль должен быть не короче {minimum} символов."
+    if value.strip().lower() == str(login or "").strip().lower():
+        return "Пароль не может совпадать с именем ящика."
+    if value.lower() in {"password", "пароль", "12345678901", "qwertyuiop"}:
+        return "Этот пароль слишком простой."
+    return ""
+
+
+class PublicSignupBody(BaseModel):
+    login: str = Field(..., min_length=1, max_length=64)
+    password: str = Field(..., min_length=1, max_length=200)
+
+
+@app.get("/api/signup/config")
+async def api_public_signup_config():
+    """Tell the sign-up page whether it may offer registration, and on what terms."""
+    enabled = _public_signup_enabled()
+    return JSONResponse(
+        {
+            "enabled": enabled,
+            "provisioning_ready": bool(enabled and _mail_admin_available()),
+            "domain": _public_signup_domain() if enabled else "",
+            "min_password": max(8, int(CFG.PUBLIC_SIGNUP_MIN_PASSWORD or 10)),
+            "per_hour": max(1, int(CFG.PUBLIC_SIGNUP_PER_HOUR or 1)),
+            "terms_url": CFG.PUBLIC_SIGNUP_TERMS_URL,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/signup")
+async def api_public_signup(body: PublicSignupBody, request: Request, response: Response):
+    """Register a mailbox on the public domain and sign the visitor in."""
+    if not _public_signup_enabled():
+        return JSONResponse(
+            {"error": "Публичная регистрация на этом сервере отключена."},
+            status_code=403,
+        )
+    if not _is_same_origin_admin_request(request):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    ip = _client_ip(request)
+    if not _public_signup_rate_allow(ip):
+        return JSONResponse(
+            {
+                "error": (
+                    "Слишком много регистраций с этого адреса. "
+                    "Попробуйте позже или напишите в поддержку."
+                )
+            },
+            status_code=429,
+        )
+
+    login, login_error = validate_public_signup_login(body.login)
+    if login_error:
+        return JSONResponse({"error": login_error, "field": "login"}, status_code=400)
+    password_error = validate_public_signup_password(body.password, login)
+    if password_error:
+        return JSONResponse({"error": password_error, "field": "password"}, status_code=400)
+
+    domain = _public_signup_domain()
+    if not domain:
+        return JSONResponse(
+            {"error": "Домен регистрации не настроен на сервере."},
+            status_code=503,
+        )
+    if not _mail_admin_available():
+        return JSONResponse(
+            {
+                "error": (
+                    "Сервер не может завести ящик самостоятельно: "
+                    "локальный почтовый сервер не подключён."
+                )
+            },
+            status_code=503,
+        )
+
+    email = f"{login}@{domain}"
+    # Counted before the attempt, so a burst of failures cannot be used to
+    # enumerate which names are already taken.
+    _public_signup_rate_record(ip)
+
+    ok, status = await asyncio.get_event_loop().run_in_executor(
+        None,
+        _mailserver_add_user_direct,
+        email,
+        body.password,
+    )
+    if not ok:
+        log.warning("public signup failed for %s: %s", email, status)
+        db_audit_log("public-signup", "signup.failed", email, details={"status": status}, ip=ip, ok=False)
+        return JSONResponse(
+            {"error": "Не удалось завести ящик. Попробуйте позже."},
+            status_code=502,
+        )
+    if status == "already exists":
+        return JSONResponse(
+            {"error": "Этот адрес уже занят. Выберите другое имя.", "field": "login"},
+            status_code=409,
+        )
+
+    db_audit_log("public-signup", "signup.created", email, ip=ip)
+
+    # Sign the new owner in straight away, but never fail the registration over
+    # it: the mailbox exists either way and the login page still works.
+    session_started = False
+    try:
+        sess_data = await _build_authenticated_session_payload(login, email, body.password)
+        token = session_create(sess_data)
+        response.set_cookie(
+            CFG.SESSION_COOKIE,
+            token,
+            max_age=CFG.SESSION_TTL,
+            httponly=True,
+            samesite="lax",
+            secure=urllib.parse.urlparse(CFG.MAIL_SSO_PUBLIC_URL).scheme == "https",
+            path="/",
+        )
+        session_started = True
+    except Exception as exc:
+        log.info("public signup session for %s not started: %s", email, exc)
+
+    return {
+        "ok": True,
+        "email": email,
+        "login": login,
+        "domain": domain,
+        "session": session_started,
+    }
+
+
+@app.get("/signup")
+async def serve_signup():
+    signup_path = Path(CFG.STATIC_DIR) / "signup.html"
+    if signup_path.exists():
+        return FileResponse(signup_path)
+    return JSONResponse({"error": "static/signup.html missing"}, status_code=500)
 
 
 @app.get("/admin")

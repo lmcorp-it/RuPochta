@@ -1302,6 +1302,68 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+// SEC-002: incoming HTML mail is already allowlist-sanitized server-side
+// (nh3), but it is still rendered in a sandboxed iframe with neither
+// allow-scripts nor allow-same-origin — so even a sanitizer bypass could not
+// execute script or read/touch the parent webmail origin. Remote images are
+// blocked by the server (rewritten to data-blocked-src); the user must
+// explicitly opt in per message before they load.
+let _mailBodyFrameSeq = 0;
+let _pendingMailBodies = new Map();
+
+function sandboxedMailBodyMarkup(html, { frameClass = "" } = {}) {
+  const id = `mail-body-frame-${++_mailBodyFrameSeq}`;
+  _pendingMailBodies.set(id, html || "");
+  const hasBlockedImages = /data-blocked-src=/.test(html || "");
+  return `
+    <div class="mail-body-sandbox ${frameClass}" data-mail-body-id="${id}">
+      ${hasBlockedImages ? `
+        <div class="mail-body-image-banner">
+          <span>Показ изображений отключён — отправитель может отследить открытие письма.</span>
+          <button type="button" class="mini-btn" data-action="show-remote-images" data-frame-id="${id}">Показать изображения</button>
+        </div>
+      ` : ""}
+      <iframe
+        id="${id}"
+        class="mail-body-iframe"
+        sandbox=""
+        referrerpolicy="no-referrer"
+        loading="lazy"
+      ></iframe>
+    </div>
+  `;
+}
+
+function mailBodyDocument(html, { allowRemoteImages = false } = {}) {
+  const body = allowRemoteImages
+    ? String(html || "").replace(/\sdata-blocked-src="/g, ' src="')
+    : html;
+  return `<!doctype html><html><head><meta charset="utf-8">` +
+    `<style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;` +
+    `font-size:14px;line-height:1.5;color:#1b1b1f;margin:12px;word-wrap:break-word;` +
+    `overflow-wrap:anywhere;} img{max-width:100%;height:auto;} a{color:#3457d5;}` +
+    `table{max-width:100%;}</style></head><body>${body || ""}</body></html>`;
+}
+
+function mountSandboxedMailBodies(root, bodiesById) {
+  const frames = root.querySelectorAll(".mail-body-iframe");
+  frames.forEach((frame) => {
+    const id = frame.id;
+    const html = bodiesById.get(id);
+    if (html == null) return;
+    frame.srcdoc = mailBodyDocument(html);
+  });
+  root.querySelectorAll('[data-action="show-remote-images"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const frameId = btn.dataset.frameId;
+      const frame = root.querySelector(`#${CSS.escape(frameId)}`);
+      const html = bodiesById.get(frameId);
+      if (!frame || html == null) return;
+      frame.srcdoc = mailBodyDocument(html, { allowRemoteImages: true });
+      btn.closest(".mail-body-image-banner")?.remove();
+    });
+  });
+}
 function renderUserProfileAvatar(profileCard = null) {
   const employee = (profileCard && profileCard.employee) || {};
   const displayName = employee.fullName
@@ -3031,9 +3093,9 @@ function previewAttachment(url, attachment) {
   if (ctype.startsWith("image/")) {
     box.innerHTML = `<img src="${escapeHtml(url)}" alt="${escapeHtml(attachment.filename)}">`;
   } else if (ctype === "application/pdf") {
-    box.innerHTML = `<iframe src="${escapeHtml(url)}"></iframe>`;
+    box.innerHTML = `<iframe src="${escapeHtml(url)}" sandbox="" referrerpolicy="no-referrer"></iframe>`;
   } else if (ctype.startsWith("text/")) {
-    box.innerHTML = `<iframe src="${escapeHtml(url)}"></iframe>`;
+    box.innerHTML = `<iframe src="${escapeHtml(url)}" sandbox="" referrerpolicy="no-referrer"></iframe>`;
   } else {
     box.innerHTML = `<div class="muted">Предпросмотр для этого типа не поддерживается.</div>`;
   }
@@ -3104,13 +3166,20 @@ async function sendInviteRsvp(response) {
   }
 }
 
+function mailBodyMarkupFor(entry) {
+  if (entry.body_html) {
+    return sandboxedMailBodyMarkup(entry.body_html);
+  }
+  return `<pre>${escapeHtml(entry.body_text || "")}</pre>`;
+}
+
 function renderThreadTimeline(messages) {
   if (!messages || messages.length <= 1) return "";
   return `
     <div class="thread-timeline">
       <div class="thread-title">Переписка (${messages.length})</div>
       ${messages.map((entry) => {
-        const bodyHtml = entry.body_html ? entry.body_html : `<pre>${escapeHtml(entry.body_text || "")}</pre>`;
+        const bodyHtml = mailBodyMarkupFor(entry);
         const inviteHtml = renderInviteCard(entry.invite || null, entry);
         return `
           <article class="thread-message-card">
@@ -3123,7 +3192,7 @@ function renderThreadTimeline(messages) {
               ${entry.to ? `<span class="muted">Кому: ${escapeHtml(entry.to)}</span>` : ""}
             </div>
             ${inviteHtml}
-            <div class="thread-message-body msg-body">${bodyHtml}</div>
+            <div class="thread-message-body">${bodyHtml}</div>
           </article>
         `;
       }).join("")}
@@ -3135,7 +3204,8 @@ function renderMessageView(message) {
   const view = $("#message-view");
   view.classList.remove("empty");
   const canWrite = activeMailboxCanWrite();
-  const bodyHtml = message.body_html ? message.body_html : `<pre>${escapeHtml(message.body_text || "")}</pre>`;
+  _pendingMailBodies = new Map();
+  const bodyHtml = mailBodyMarkupFor(message);
   const inviteHtml = renderInviteCard(message.invite || null, message);
   const local = state.messages.find((m) => m.uid === message.uid);
   const flagged = !!(local && local.flagged);
@@ -3178,6 +3248,7 @@ function renderMessageView(message) {
     </div>
     ${threadCount > 1 ? renderThreadTimeline(state.currentThreadMessages) : `<div class="msg-body">${bodyHtml}</div>`}
   `;
+  mountSandboxedMailBodies(view, _pendingMailBodies);
 
   if (canWrite) {
     $("#btn-reply").addEventListener("click", () => openCompose("reply"));
@@ -4340,6 +4411,100 @@ function switchSettingsTab(tab) {
   $$("[data-settings-panel]").forEach((item) => item.classList.toggle("hidden", item.dataset.settingsPanel !== tab));
 }
 
+// External mailbox (ADR-0071): the user connects a foreign mailbox to their own
+// login. Everything here is one round trip to /mailbox/external — the endpoint
+// verifies the credentials against the provider before storing them.
+function renderExternalMailbox(payload) {
+  const select = $("#external-mailbox-provider");
+  const current = $("#external-mailbox-current");
+  const status = $("#external-mailbox-status");
+  const form = $("#external-mailbox-form");
+  if (!select) return;
+  if (!payload.available) {
+    form.classList.add("hidden");
+    current.classList.remove("hidden");
+    current.textContent = "Подключение доступно после входа через внешний аккаунт.";
+    return;
+  }
+  form.classList.remove("hidden");
+  if (!select.options.length) {
+    (payload.providers || []).forEach((provider) => {
+      const option = document.createElement("option");
+      option.value = provider.id;
+      option.textContent = provider.name;
+      select.append(option);
+    });
+  }
+  const connected = Boolean(payload.external && payload.email);
+  current.classList.toggle("hidden", !connected);
+  if (connected) current.textContent = `Подключён ${payload.email}`;
+  $("#external-mailbox-disconnect").classList.toggle("hidden", !connected);
+  $("#external-mailbox-connect").textContent = connected ? "Переподключить" : "Подключить";
+  if (payload.conflict) {
+    status.textContent = "Привязка повреждена — подключите ящик заново.";
+    status.classList.add("warning");
+  }
+  toggleExternalCustomFields();
+}
+
+function toggleExternalCustomFields() {
+  const custom = $("#external-mailbox-provider").value === "custom";
+  $("#external-mailbox-custom").classList.toggle("hidden", !custom);
+}
+
+async function loadExternalMailbox() {
+  try {
+    renderExternalMailbox(await apiFetch("/mailbox/external"));
+  } catch (e) {
+    $("#external-mailbox-status").textContent = e.message || "Не удалось загрузить состояние";
+  }
+}
+
+async function connectExternalMailbox(event) {
+  event.preventDefault();
+  const status = $("#external-mailbox-status");
+  const button = $("#external-mailbox-connect");
+  status.classList.remove("warning");
+  status.textContent = "Проверяем доступ…";
+  button.disabled = true;
+  const body = {
+    provider: $("#external-mailbox-provider").value,
+    email: $("#external-mailbox-email").value.trim(),
+    password: $("#external-mailbox-password").value,
+  };
+  if (body.provider === "custom") {
+    body.imap_host = $("#external-mailbox-imap-host").value.trim();
+    body.imap_port = Number($("#external-mailbox-imap-port").value) || null;
+    body.smtp_host = $("#external-mailbox-smtp-host").value.trim();
+    body.smtp_port = Number($("#external-mailbox-smtp-port").value) || null;
+  }
+  try {
+    await apiFetch("/mailbox/external", { method: "POST", body: JSON.stringify(body) });
+    $("#external-mailbox-password").value = "";
+    status.textContent = "Ящик подключён";
+    await loadExternalMailbox();
+  } catch (e) {
+    status.textContent = e.message || "Не удалось подключить ящик";
+    status.classList.add("warning");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function disconnectExternalMailbox() {
+  const status = $("#external-mailbox-status");
+  status.classList.remove("warning");
+  status.textContent = "Отключаем…";
+  try {
+    await apiFetch("/mailbox/external", { method: "DELETE" });
+    status.textContent = "Ящик отключён";
+    await loadExternalMailbox();
+  } catch (e) {
+    status.textContent = e.message || "Не удалось отключить ящик";
+    status.classList.add("warning");
+  }
+}
+
 function handleSettingsTabKeydown(event) {
   const tabs = Array.from($$(".settings-tab"));
   const current = tabs.indexOf(event.currentTarget);
@@ -4694,6 +4859,7 @@ async function openSettings(trigger = null) {
   state.ui.foldersSettingsLoaded = false;
   state.ui.rulesSettingsLoaded = false;
   setSettingsLoading(true);
+  loadExternalMailbox();
   $("#signature-status").textContent = "";
   $("#template-status").textContent = "";
   $("#forwarding-status").textContent = "Загрузка настройки…";
@@ -5233,6 +5399,9 @@ function bindEvents() {
     navigateWorkspace(fallback);
   });
   $("#btn-settings").addEventListener("click", (event) => openSettings(event.currentTarget));
+  $("#external-mailbox-form").addEventListener("submit", connectExternalMailbox);
+  $("#external-mailbox-disconnect").addEventListener("click", disconnectExternalMailbox);
+  $("#external-mailbox-provider").addEventListener("change", toggleExternalCustomFields);
   $("#user-profile-button").addEventListener("click", (event) => openAccount(event.currentTarget));
   $("#account-profile-form").addEventListener("submit", saveAccountProfile);
   $("#account-avatar-button").addEventListener("click", () => $("#account-avatar-input").click());

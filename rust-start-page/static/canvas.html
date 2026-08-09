@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RuПочта — Бесконечный холст · Стартовая страница</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0b0f1a;
+    --bg-subtle: #10152a;
+    --surface: #131a30;
+    --surface-raised: #1a2340;
+    --border: rgba(203,220,245,0.10);
+    --border-hover: rgba(203,220,245,0.20);
+    --accent: #1f66e5;
+    --accent-dim: rgba(31,102,229,0.16);
+    --text: #e8eef9;
+    --text-secondary: rgba(232,238,249,0.62);
+    --text-tertiary: rgba(232,238,249,0.34);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.35);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.4);
+    --shadow-drag: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1.5px var(--accent);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 20px;
+    --font-sans: "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "Cascadia Mono", "Fira Code", Consolas, monospace;
+    --note-bg: #16203a;
+    --note-border: rgba(31,102,229,0.3);
+    --transition-fast: 120ms cubic-bezier(0.25, 0.1, 0.25, 1);
+    --transition-normal: 200ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    font-family: var(--font-sans);
+    color: var(--text);
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 512px 512px;
+    mix-blend-mode: overlay;
+  }
+
+  .canvas-viewport {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    cursor: grab;
+  }
+  .canvas-viewport.panning { cursor: grabbing; }
+
+  .canvas-world {
+    position: absolute;
+    left: 0; top: 0;
+    width: 20000px; height: 20000px;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+
+  .canvas-viewport {
+    --grid-color: rgba(203,220,245,0.05);
+  }
+
+  .canvas-el {
+    position: absolute;
+    cursor: grab;
+    transition: box-shadow var(--transition-normal), transform var(--transition-fast);
+  }
+  .canvas-el:hover { z-index: 10; }
+  .canvas-el.dragging {
+    cursor: grabbing;
+    z-index: 999;
+    box-shadow: var(--shadow-drag) !important;
+    transform: scale(1.01);
+    transition: none;
+  }
+
+  .section-header {
+    position: absolute;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    white-space: nowrap;
+  }
+  .section-header .section-num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    opacity: 0.8;
+  }
+  .section-header .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .section-header .section-line {
+    flex: none;
+    width: 48px;
+    height: 1px;
+    background: linear-gradient(90deg, var(--accent) 0%, transparent 100%);
+    opacity: 0.3;
+  }
+
+  .canvas-title {
+    position: absolute;
+    pointer-events: none;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  .canvas-text {
+    position: absolute;
+    line-height: 1.7;
+    letter-spacing: 0.005em;
+    color: var(--text-secondary);
+    min-width: 200px;
+    max-width: 560px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .canvas-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: border-color var(--transition-fast), background var(--transition-fast);
+    white-space: nowrap;
+  }
+  .canvas-tag:hover {
+    border-color: var(--border-hover);
+    background: var(--surface-raised);
+  }
+  .canvas-tag .tag-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .context-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    min-width: 220px;
+    transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+  }
+  .context-card:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-md);
+  }
+  .context-card .card-head {
+    padding: 16px 20px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .context-card .card-head .head-indicator {
+    width: 3px;
+    height: 16px;
+    border-radius: 2px;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  .context-card .card-head h3 {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--text);
+  }
+  .context-card .card-content {
+    padding: 0 20px 20px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+  }
+  .context-card .card-content ul {
+    list-style: none;
+    padding: 0;
+  }
+  .context-card .card-content li {
+    padding: 4px 0;
+    padding-left: 12px;
+    position: relative;
+  }
+  .context-card .card-content li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 11px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+  }
+
+  .ds-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+  }
+  .ds-card:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-md);
+  }
+  .ds-card .ds-head {
+    padding: 16px 20px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .ds-card .ds-body {
+    padding: 0 20px 20px;
+  }
+
+  .ds-card .color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    gap: 8px;
+  }
+  .ds-card .color-chip {
+    aspect-ratio: 1;
+    border-radius: var(--radius-sm);
+    position: relative;
+    transition: transform var(--transition-fast);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .ds-card .color-chip:hover { transform: scale(1.08); }
+  .ds-card .color-chip .chip-label {
+    position: absolute;
+    bottom: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+  }
+
+  .ds-card .type-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .ds-card .type-row {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+  .ds-card .type-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-tertiary);
+    min-width: 36px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .ds-card .type-sample {
+    color: var(--text);
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .color-swatch-group {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 18px;
+  }
+  .swatch-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .swatch-circle {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.08);
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    border: 1px solid rgba(255,255,255,0.10);
+  }
+  .swatch-circle:hover {
+    transform: scale(1.1);
+    box-shadow: var(--shadow-md);
+  }
+  .swatch-name {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-align: center;
+  }
+  .swatch-hex {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-tertiary);
+    text-align: center;
+  }
+
+  .type-sample-group {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 380px;
+  }
+  .type-sample-row {
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+  }
+  .type-sample-meta {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-tertiary);
+    min-width: 52px;
+    flex-shrink: 0;
+    letter-spacing: 0.04em;
+  }
+  .type-sample-text {
+    color: var(--text);
+    line-height: 1.25;
+  }
+
+  .canvas-note {
+    background: var(--note-bg);
+    border: 1px solid var(--note-border);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    min-width: 200px;
+    max-width: 300px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--transition-normal), transform var(--transition-fast);
+  }
+  .canvas-note:hover {
+    box-shadow: var(--shadow-md);
+  }
+  .canvas-note .note-tag {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    opacity: 0.75;
+    margin-bottom: 8px;
+  }
+  .canvas-note .note-body {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text-secondary);
+  }
+
+  .design-page {
+    background: #fff;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+    transition: box-shadow var(--transition-normal);
+  }
+  .design-page:hover {
+    box-shadow: 0 16px 56px rgba(0,0,0,0.55), 0 6px 16px rgba(0,0,0,0.4);
+  }
+  .design-page .page-content {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  .page-label {
+    position: absolute;
+    bottom: -32px;
+    left: 0;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .page-label .label-num {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent);
+    opacity: 0.6;
+  }
+
+  .canvas-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  .canvas-diagram .diagram-content {
+    width: 100%;
+    height: 100%;
+    padding: 20px;
+  }
+
+  .zoom-controls {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    z-index: 100;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+  }
+  .zoom-btn {
+    width: 36px; height: 36px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+  .zoom-btn:hover {
+    background: rgba(255,255,255,0.06);
+    color: var(--text);
+  }
+  .zoom-label {
+    min-width: 50px; height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  .coord-indicator {
+    position: fixed;
+    bottom: 28px; left: 24px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+    z-index: 100;
+    padding: 4px 10px;
+    background: rgba(11,15,26,0.85);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .kbd-hint {
+    position: fixed;
+    top: 20px; right: 24px;
+    z-index: 100;
+    font-size: 10px;
+    color: var(--text-tertiary);
+    display: flex;
+    gap: 12px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+  }
+  .canvas-viewport:hover ~ .kbd-hint { opacity: 1; }
+  .kbd-hint kbd {
+    font-family: var(--font-mono);
+    padding: 2px 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 10px;
+  }
+</style>
+</head>
+<body>
+
+<div class="canvas-viewport" id="viewport">
+  <div class="canvas-world" id="world"></div>
+</div>
+
+<div class="zoom-controls">
+  <button class="zoom-btn" id="zoomOut" aria-label="Уменьшить">&#8722;</button>
+  <div class="zoom-label" id="zoomLabel">100%</div>
+  <button class="zoom-btn" id="zoomIn" aria-label="Увеличить">+</button>
+  <button class="zoom-btn" id="zoomReset" title="Сброс вида" aria-label="Сброс вида">&#8962;</button>
+</div>
+
+<div class="coord-indicator" id="coordIndicator">0, 0</div>
+
+<div class="kbd-hint">
+  <span><kbd>Scroll</kbd> перемещение</span>
+  <span><kbd>Ctrl+Scroll</kbd> масштаб</span>
+  <span><kbd>Ctrl+Z</kbd> отмена</span>
+</div>
+
+<script>
+(() => {
+  const viewport = document.getElementById('viewport');
+  const world = document.getElementById('world');
+  const zoomLabel = document.getElementById('zoomLabel');
+  const coordIndicator = document.getElementById('coordIndicator');
+
+  let panX = 0, panY = 0, zoom = 1;
+  const MIN_ZOOM = 0.05, MAX_ZOOM = 8;
+
+  function updateTransform() {
+    world.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
+    zoomLabel.textContent = Math.round(zoom * 100) + '%';
+    updateGrid();
+  }
+
+  function updateGrid() {
+    const g = 40 * zoom;
+    const ox = panX % g, oy = panY % g;
+    viewport.style.backgroundImage = `radial-gradient(circle, var(--grid-color) 0.8px, transparent 0.8px)`;
+    viewport.style.backgroundSize = `${g}px ${g}px`;
+    viewport.style.backgroundPosition = `${ox}px ${oy}px`;
+  }
+
+  let isPanning = false, panSX, panSY;
+  viewport.addEventListener('pointerdown', (e) => {
+    if (e.target === viewport || e.target === world) {
+      isPanning = true;
+      panSX = e.clientX - panX;
+      panSY = e.clientY - panY;
+      viewport.classList.add('panning');
+      viewport.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    }
+  });
+  viewport.addEventListener('pointermove', (e) => {
+    if (!isPanning) return;
+    panX = e.clientX - panSX;
+    panY = e.clientY - panSY;
+    updateTransform();
+  });
+  viewport.addEventListener('pointerup', () => {
+    isPanning = false;
+    viewport.classList.remove('panning');
+  });
+
+  viewport.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect = viewport.getBoundingClientRect();
+    if (e.ctrlKey || e.metaKey) {
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const wx = (mx - panX) / zoom, wy = (my - panY) / zoom;
+      const factor = e.deltaY > 0 ? 0.95 : 1.05;
+      zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor));
+      panX = mx - wx * zoom;
+      panY = my - wy * zoom;
+    } else {
+      const hasX = Math.abs(e.deltaX) > 0.5;
+      if (hasX || Math.abs(e.deltaX) > Math.abs(e.deltaY) * 0.3) {
+        panX -= e.deltaX;
+        panY -= e.deltaY;
+      } else {
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        const wx = (mx - panX) / zoom, wy = (my - panY) / zoom;
+        const factor = e.deltaY > 0 ? 0.95 : 1.05;
+        zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor));
+        panX = mx - wx * zoom;
+        panY = my - wy * zoom;
+      }
+    }
+    updateTransform();
+  }, { passive: false });
+
+  function zoomAt(factor) {
+    const r = viewport.getBoundingClientRect();
+    const cx = r.width / 2, cy = r.height / 2;
+    const wx = (cx - panX) / zoom, wy = (cy - panY) / zoom;
+    zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor));
+    panX = cx - wx * zoom;
+    panY = cy - wy * zoom;
+    updateTransform();
+  }
+  document.getElementById('zoomIn').onclick = () => zoomAt(1.25);
+  document.getElementById('zoomOut').onclick = () => zoomAt(0.8);
+  document.getElementById('zoomReset').onclick = () => { zoom = 1; panX = 0; panY = 0; updateTransform(); };
+
+  viewport.addEventListener('pointermove', (e) => {
+    if (isPanning) return;
+    const r = viewport.getBoundingClientRect();
+    coordIndicator.textContent = `${Math.round((e.clientX - r.left - panX) / zoom)}, ${Math.round((e.clientY - r.top - panY) / zoom)}`;
+  });
+
+  let lastPinchDist = null, lastPinchCenter = null;
+  viewport.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      const t0 = e.touches[0], t1 = e.touches[1];
+      lastPinchDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+      lastPinchCenter = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+      e.preventDefault();
+    }
+  }, { passive: false });
+  viewport.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 2) return;
+    e.preventDefault();
+    const t0 = e.touches[0], t1 = e.touches[1];
+    const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+    const center = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+    if (lastPinchDist > 0) {
+      const r = viewport.getBoundingClientRect();
+      const mx = center.x - r.left, my = center.y - r.top;
+      const wx = (mx - panX) / zoom, wy = (my - panY) / zoom;
+      zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * Math.pow(dist / lastPinchDist, 0.6)));
+      panX = mx - wx * zoom;
+      panY = my - wy * zoom;
+    }
+    if (lastPinchCenter) {
+      panX += center.x - lastPinchCenter.x;
+      panY += center.y - lastPinchCenter.y;
+    }
+    lastPinchDist = dist;
+    lastPinchCenter = center;
+    updateTransform();
+  }, { passive: false });
+  viewport.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) { lastPinchDist = null; lastPinchCenter = null; }
+  });
+
+  const undoStack = [];
+  function saveUndo() {
+    const s = [];
+    world.querySelectorAll('.canvas-el').forEach(el => {
+      s.push({ id: el.id, left: el.style.left, top: el.style.top });
+    });
+    undoStack.push({ panX, panY, zoom, assets: s });
+    if (undoStack.length > 60) undoStack.shift();
+  }
+  function undo() {
+    if (!undoStack.length) return;
+    const st = undoStack.pop();
+    panX = st.panX; panY = st.panY; zoom = st.zoom;
+    st.assets.forEach(a => {
+      const el = document.getElementById(a.id);
+      if (el) { el.style.left = a.left; el.style.top = a.top; }
+    });
+    updateTransform();
+  }
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+  });
+
+  function makeDraggable(el) {
+    let dragging = false, sx, sy, ox, oy;
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      dragging = true;
+      el.classList.add('dragging');
+      saveUndo();
+      sx = e.clientX; sy = e.clientY;
+      ox = parseFloat(el.style.left); oy = parseFloat(el.style.top);
+      el.setPointerCapture(e.pointerId);
+      e.stopPropagation();
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      el.style.left = (ox + (e.clientX - sx) / zoom) + 'px';
+      el.style.top = (oy + (e.clientY - sy) / zoom) + 'px';
+    });
+    el.addEventListener('pointerup', () => {
+      if (dragging) { dragging = false; el.classList.remove('dragging'); }
+    });
+  }
+
+  let _id = 0;
+  function uid(prefix) { return (prefix || 'el') + '-' + (++_id); }
+
+  function addSection(rowY, label) {
+    const parts = label.split(' ');
+    const num = parts[0] || '';
+    const rest = parts.slice(1).join(' ');
+    const el = document.createElement('div');
+    el.className = 'section-header';
+    el.style.left = '60px';
+    el.style.top = rowY + 'px';
+    el.innerHTML = `<span class="section-line"></span><span class="section-num">${num}</span><span class="section-label">${rest}</span>`;
+    world.appendChild(el);
+    return rowY;
+  }
+
+  function addTitle(x, y, text, options = {}) {
+    const el = document.createElement('div');
+    el.className = 'canvas-title';
+    el.id = uid('title');
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.fontSize = (options.fontSize || 48) + 'px';
+    if (options.fontWeight) el.style.fontWeight = options.fontWeight;
+    if (options.color) el.style.color = options.color;
+    if (options.maxWidth) el.style.maxWidth = options.maxWidth + 'px';
+    el.textContent = text;
+    world.appendChild(el);
+    return el;
+  }
+
+  function addText(x, y, text, options = {}) {
+    const el = document.createElement('div');
+    el.className = 'canvas-text canvas-el';
+    el.id = uid('text');
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.fontSize = (options.fontSize || 14) + 'px';
+    if (options.color) el.style.color = options.color;
+    if (options.maxWidth) el.style.maxWidth = options.maxWidth + 'px';
+    el.textContent = text;
+    world.appendChild(el);
+    makeDraggable(el);
+    return el;
+  }
+
+  function addTag(x, y, label, options = {}) {
+    const el = document.createElement('div');
+    el.className = 'canvas-el';
+    el.id = uid('tag');
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    const dotColor = options.color || 'var(--accent)';
+    el.innerHTML = `<div class="canvas-tag"><span class="tag-dot" style="background:${dotColor}"></span>${label}</div>`;
+    world.appendChild(el);
+    makeDraggable(el);
+    return el;
+  }
+
+  function addContextCard(x, y, w, h, title, content) {
+    const el = document.createElement('div');
+    el.className = 'canvas-el';
+    el.id = uid('ctx');
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.width = w + 'px';
+    if (h) el.style.height = h + 'px';
+    el.innerHTML = `<div class="context-card" style="width:100%;${h ? 'height:100%' : ''}">
+      <div class="card-head"><div class="head-indicator"></div><h3>${title}</h3></div>
+      <div class="card-content">${content}</div>
+    </div>`;
+    world.appendChild(el);
+    makeDraggable(el);
+    return el;
+  }
+
+  function addDesignSystemCard(x, y, w, h, type, data) {
+    const el = document.createElement('div');
+    el.className = 'canvas-el';
+    el.id = uid('ds');
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.width = w + 'px';
+    if (h) el.style.height = h + 'px';
+
+    let body = '';
+    if (type === 'color' && Array.isArray(data.colors)) {
+      body = `<div class="color-grid">${data.colors.map(c =>
+        `<div class="color-chip" style="background:${c.hex}"><span class="chip-label">${c.name || c.hex}</span></div>`
+      ).join('')}</div>`;
+    } else if (type === 'typography' && Array.isArray(data.samples)) {
+      body = `<div class="type-stack">${data.samples.map(s =>
+        `<div class="type-row"><span class="type-label">${s.label}</span><span class="type-sample" style="font-size:${s.size}px;font-weight:${s.weight || 400}">${s.text || 'Aa'}</span></div>`
+      ).join('')}</div>`;
+    } else if (typeof data.html === 'string') {
+      body = data.html;
+    }
+
+    el.innerHTML = `<div class="ds-card" style="width:100%;${h ? 'height:100%' : ''}">
+      <div class="ds-head">${data.title || type}</div>
+      <div class="ds-body">${body}</div>
+    </div>`;
+    world.appendChild(el);
+    makeDraggable(el);
+    return el;
+  }
+
+  function addColorSwatch(x, y, colors) {
+    const el = document.createElement('div');
+    el.className = 'canvas-el';
+    el.id = uid('swatch');
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.innerHTML = `<div class="color-swatch-group">${colors.map(c =>
+      `<div class="swatch-item">
+        <div class="swatch-circle" style="background:${c.hex}"></div>
+        <div class="swatch-name">${c.name || ''}</div>
+        <div class="swatch-hex">${c.hex}</div>
+      </div>`
+    ).join('')}</div>`;
+    world.appendChild(el);
+    makeDraggable(el);
+    return el;
+  }
+
+  function addTypeSample(x, y, samples) {
+    const el = document.createElement('div');
+    el.className = 'canvas-el';
+    el.id = uid('typesample');
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.innerHTML = `<div class="type-sample-group">${samples.map(s =>
+      `<div class="type-sample-row">
+        <span class="type-sample-meta">${s.label}<br>${s.size}px</span>
+        <span class="type-sample-text" style="font-size:${s.size}px;font-weight:${s.weight || 400};${s.font ? 'font-family:' + s.font : ''}">${s.text || 'The quick brown fox'}</span>
+      </div>`
+    ).join('')}</div>`;
+    world.appendChild(el);
+    makeDraggable(el);
+    return el;
+  }
+
+  let _pageNum = 0;
+  function addPage(x, y, w, h, label, htmlContent) {
+    _pageNum++;
+    const el = document.createElement('div');
+    el.className = 'canvas-el';
+    el.id = uid('page');
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.width = w + 'px';
+    el.style.height = (h + 40) + 'px';
+    el.innerHTML = `<div class="design-page" style="width:${w}px;height:${h}px;">
+      <div class="page-content">${htmlContent}</div>
+    </div>
+    <div class="page-label"><span class="label-num">${String(_pageNum).padStart(2,'0')}</span>${label}</div>`;
+    world.appendChild(el);
+    makeDraggable(el);
+    return el;
+  }
+
+  function addNote(x, y, tag, text) {
+    const el = document.createElement('div');
+    el.className = 'canvas-el';
+    el.id = uid('note');
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.innerHTML = `<div class="canvas-note">
+      <div class="note-tag">${tag}</div>
+      <div class="note-body">${text}</div>
+    </div>`;
+    world.appendChild(el);
+    makeDraggable(el);
+    return el;
+  }
+
+  function addDiagram(x, y, w, h, htmlContent) {
+    const el = document.createElement('div');
+    el.className = 'canvas-el';
+    el.id = uid('diagram');
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.width = w + 'px';
+    el.style.height = h + 'px';
+    el.innerHTML = `<div class="canvas-diagram" style="width:100%;height:100%;">
+      <div class="diagram-content">${htmlContent}</div>
+    </div>`;
+    world.appendChild(el);
+    makeDraggable(el);
+    return el;
+  }
+
+  function below(el, gap) { if (gap === undefined) gap = 20; return parseFloat(el.style.top) + el.offsetHeight + gap; }
+  function rightOf(el, gap) { if (gap === undefined) gap = 20; return parseFloat(el.style.left) + el.offsetWidth + gap; }
+  function maxY(els, gap) { if (gap === undefined) gap = 20; return Math.max(...els.map(e => parseFloat(e.style.top) + e.offsetHeight)) + gap; }
+  function maxX(els, gap) { if (gap === undefined) gap = 20; return Math.max(...els.map(e => parseFloat(e.style.left) + e.offsetWidth)) + gap; }
+
+  window.canvas = { addSection, addTitle, addText, addTag, addContextCard, addDesignSystemCard, addColorSwatch, addTypeSample, addPage, addNote, addDiagram, below, rightOf, maxY, maxX };
+
+  /* ================== СЦЕНА: RuPochta ================== */
+
+  /* Макет «Вход» (390×844) — тёмный, для Figma-экспорта */
+  const LOGIN_PAGE = `
+  <div style="width:100%;height:100%;background:#070b14;color:#e8eef9;font-family:'Segoe UI',system-ui,sans-serif;display:flex;flex-direction:column;position:relative;overflow:hidden;">
+    <div style="height:4px;background:linear-gradient(90deg,#1f66e5 0%,#f04453 100%);"></div>
+    <div style="padding:20px 22px 0;">
+      <div style="display:flex;align-items:center;gap:10px;font-family:'Arial Narrow',Arial,sans-serif;font-weight:800;font-size:21px;letter-spacing:0.02em;">
+        <div style="width:34px;height:34px;border-radius:9px;background:linear-gradient(140deg,#101a30,#0a1326);border:1px solid rgba(203,220,245,0.16);display:flex;align-items:center;justify-content:center;font-size:15px;"><span style="color:#1f66e5;">Ru</span><span style="color:#f04453;">Почта</span></div>
+        <span><span style="color:#1f66e5;">Ru</span><span style="color:#f04453;">Почта</span></span>
+      </div>
+    </div>
+    <div style="padding:26px 22px 0;">
+      <div style="font-family:'Cascadia Mono',Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#35b8e8;">Открытая почта · свой сервер</div>
+      <div style="font-family:'Arial Narrow',Arial,sans-serif;font-weight:800;font-size:31px;line-height:1.02;text-transform:uppercase;margin-top:8px;">Войти<br>в почту</div>
+    </div>
+    <div style="padding:20px 22px;display:grid;grid-template-columns:1fr 1fr;gap:9px;">
+      <div style="min-height:46px;border-radius:10px;background:#101a30;border:1px solid rgba(203,220,245,0.14);display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:600;"><div style="width:20px;height:20px;border-radius:6px;background:#fc3f1d;color:#fff;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;">Я</div>Яндекс</div>
+      <div style="min-height:46px;border-radius:10px;background:#101a30;border:1px solid rgba(203,220,245,0.14);display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:600;"><div style="width:20px;height:20px;border-radius:6px;background:#fc3f1d;color:#fff;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;">Я</div>Яндекс Почта</div>
+      <div style="min-height:46px;border-radius:10px;background:#101a30;border:1px solid rgba(203,220,245,0.14);display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:600;"><svg width="18" height="18" viewBox="0 0 24 24" fill="#0077ff"><path d="M12.8 17.2c-4.9 0-7.7-3.4-7.8-9h2.5c.1 4.1 1.9 5.9 3.3 6.2V8.2h2.3v3.5c1.4-.2 2.8-1.8 3.3-3.5h2.3c-.4 2.3-2 3.9-3.2 4.6 1.2.6 3.1 2.1 3.8 4.4h-2.6c-.5-1.7-1.9-3-3.6-3.2v3.2h-.3Z"/></svg>VK ID</div>
+      <div style="min-height:46px;border-radius:10px;background:#101a30;border:1px solid rgba(203,220,245,0.14);display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:600;"><svg width="18" height="18" viewBox="0 0 128 128" fill="#2aabee"><path d="M28.97 63.324c18.657-8.128 31.098-13.487 37.323-16.076 17.774-7.393 21.467-8.677 23.874-8.72.53-.009 1.713.122 2.48.745.648.525.826 1.235.911 1.733.086.498.192 1.633.107 2.519-.963 10.12-5.13 34.678-7.251 46.013-.897 4.796-2.663 6.404-4.374 6.561-3.716.342-6.538-2.456-10.138-4.815-5.633-3.693-8.815-5.991-14.283-9.594-6.319-4.164-2.222-6.453 1.379-10.193.942-.979 17.317-15.874 17.634-17.225.04-.169.077-.799-.297-1.131-.375-.333-.927-.219-1.326-.129-.564.129-9.563 6.077-27 17.844-2.55 1.754-4.864 2.609-6.936 2.564-2.285-.049-6.681-1.292-9.948-2.354-4.008-1.303-7.194-1.992-6.916-4.204.144-1.153 1.731-2.332 4.761-3.537Z"/></svg>Telegram</div>
+    </div>
+    <div style="padding:0 22px;display:flex;align-items:center;gap:12px;color:#5b6b86;font-size:12px;"><div style="flex:1;height:1px;background:rgba(203,220,245,0.14);"></div>или войдите с помощью почты<div style="flex:1;height:1px;background:rgba(203,220,245,0.14);"></div></div>
+    <div style="padding:16px 22px 0;display:flex;flex-direction:column;gap:6px;">
+      <div style="font-size:13px;font-weight:600;">Рабочий email или логин</div>
+      <div style="min-height:48px;border-radius:10px;background:#101a30;border:1px solid rgba(203,220,245,0.14);display:flex;align-items:center;padding:0 12px;color:#5f6f8f;font-size:14px;">name@example.com</div>
+    </div>
+    <div style="padding:12px 22px 0;display:flex;flex-direction:column;gap:6px;">
+      <div style="font-size:13px;font-weight:600;">Пароль</div>
+      <div style="min-height:48px;border-radius:10px;background:#101a30;border:1px solid rgba(203,220,245,0.14);display:flex;align-items:center;padding:0 12px;color:#5f6f8f;font-size:14px;justify-content:space-between;">••••••••••<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8fa0bf" stroke-width="1.8"><path d="M2.5 12s3.5-5.25 9.5-5.25S21.5 12 21.5 12 18 17.25 12 17.25 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.4"/></svg></div>
+    </div>
+    <div style="padding:12px 22px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13.5px;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#1f66e5" stroke-width="2"><rect x="1" y="1" width="14" height="14" rx="3"/><path d="M4 8l3 3 5-6"/></svg>Запомнить вход</div>
+      <div style="font-size:13.5px;color:#1f66e5;">Не помню пароль</div>
+    </div>
+    <div style="padding:0 22px;">
+      <div style="min-height:50px;border-radius:10px;background:#1f66e5;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;font-weight:650;">Войти в почту<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 12h13M13 6l6 6-6 6"/></svg></div>
+    </div>
+    <div style="padding:14px 22px 0;text-align:center;font-size:13.5px;color:#8fa0bf;">Нет ящика? <span style="color:#1f66e5;font-weight:600;">Завести почту</span></div>
+    <div style="margin-top:auto;padding:14px 22px 18px;display:flex;align-items:center;justify-content:center;gap:8px;border-top:1px solid rgba(203,220,245,0.12);font-size:11.5px;color:#8fa0bf;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8fa0bf" stroke-width="1.8"><path d="M8 10V7a4 4 0 0 1 8 0v3h1.25A1.75 1.75 0 0 1 19 11.75v7.5A1.75 1.75 0 0 1 17.25 21H6.75A1.75 1.75 0 0 1 5 19.25v-7.5A1.75 1.75 0 0 1 6.75 10H8Zm2 0h4V7a2 2 0 1 0-4 0v3Z"/></svg>TLS-защищённое соединение</div>
+  </div>`;
+
+  /* Макет «Регистрация» (390×844) */
+  const SIGNUP_PAGE = `
+  <div style="width:100%;height:100%;background:#070b14;color:#e8eef9;font-family:'Segoe UI',system-ui,sans-serif;display:flex;flex-direction:column;position:relative;overflow:hidden;">
+    <div style="height:4px;background:linear-gradient(90deg,#f04453 0%,#1f66e5 100%);"></div>
+    <div style="padding:20px 22px 0;">
+      <div style="display:flex;align-items:center;gap:10px;font-family:'Arial Narrow',Arial,sans-serif;font-weight:800;font-size:21px;letter-spacing:0.02em;">
+        <div style="width:34px;height:34px;border-radius:9px;background:linear-gradient(140deg,#101a30,#0a1326);border:1px solid rgba(203,220,245,0.16);display:flex;align-items:center;justify-content:center;font-size:15px;"><span style="color:#1f66e5;">Ru</span><span style="color:#f04453;">Почта</span></div>
+        <span><span style="color:#1f66e5;">Ru</span><span style="color:#f04453;">Почта</span></span>
+      </div>
+    </div>
+    <div style="padding:24px 22px 0;">
+      <div style="font-family:'Cascadia Mono',Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#35b8e8;">Завести ящик · бесплатно</div>
+      <div style="font-family:'Arial Narrow',Arial,sans-serif;font-weight:800;font-size:30px;line-height:1.02;text-transform:uppercase;margin-top:8px;">Заведите<br>почтовый ящик</div>
+    </div>
+    <div style="padding:18px 22px 0;display:flex;flex-direction:column;gap:6px;">
+      <div style="font-size:13px;font-weight:600;">Имя ящика</div>
+      <div style="display:flex;">
+        <div style="flex:1;min-height:48px;border-radius:10px 0 0 10px;background:#101a30;border:1px solid rgba(203,220,245,0.14);display:flex;align-items:center;padding:0 12px;color:#5f6f8f;font-size:14px;">ivan.petrov</div>
+        <div style="min-height:48px;border-radius:0 10px 10px 0;background:#101a30;border:1px solid rgba(203,220,245,0.14);border-left:0;display:flex;align-items:center;padding:0 12px;color:#8fa0bf;font-family:'Cascadia Mono',Consolas,monospace;font-size:12.5px;">@example.com</div>
+      </div>
+      <div style="font-size:12px;color:#8fa0bf;">3–30 символов: латиница, цифры, точка, дефис, подчёркивание.</div>
+    </div>
+    <div style="padding:14px 22px 0;display:flex;flex-direction:column;gap:6px;">
+      <div style="font-size:13px;font-weight:600;">Пароль</div>
+      <div style="min-height:48px;border-radius:10px;background:#101a30;border:1px solid rgba(203,220,245,0.14);display:flex;align-items:center;padding:0 12px;color:#5f6f8f;font-size:14px;justify-content:space-between;">••••••••••••<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8fa0bf" stroke-width="1.8"><path d="M2.5 12s3.5-5.25 9.5-5.25S21.5 12 21.5 12 18 17.25 12 17.25 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.4"/></svg></div>
+      <div style="font-size:12px;color:#8fa0bf;">Не короче 10 символов.</div>
+    </div>
+    <div style="padding:14px 22px 0;display:flex;flex-direction:column;gap:6px;">
+      <div style="font-size:13px;font-weight:600;">Пароль ещё раз</div>
+      <div style="min-height:48px;border-radius:10px;background:#101a30;border:1px solid rgba(203,220,245,0.14);display:flex;align-items:center;padding:0 12px;color:#5f6f8f;font-size:14px;">••••••••••••</div>
+    </div>
+    <div style="padding:18px 22px 0;">
+      <div style="min-height:50px;border-radius:10px;background:#f04453;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;font-weight:650;">Создать ящик<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 12h13M13 6l6 6-6 6"/></svg></div>
+    </div>
+    <div style="padding:14px 22px 0;text-align:center;font-size:13.5px;color:#8fa0bf;">Уже есть ящик? <span style="color:#1f66e5;font-weight:600;">Войти</span></div>
+    <div style="margin-top:auto;padding:14px 22px 18px;display:flex;align-items:center;justify-content:center;gap:8px;border-top:1px solid rgba(203,220,245,0.12);font-size:11.5px;color:#8fa0bf;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8fa0bf" stroke-width="1.8"><path d="M8 10V7a4 4 0 0 1 8 0v3h1.25A1.75 1.75 0 0 1 19 11.75v7.5A1.75 1.75 0 0 1 17.25 21H6.75A1.75 1.75 0 0 1 5 19.25v-7.5A1.75 1.75 0 0 1 6.75 10H8Zm2 0h4V7a2 2 0 1 0-4 0v3Z"/></svg>TLS-защищённое соединение</div>
+  </div>`;
+
+  /* Макет «Ящик создан» (390×844) — состояние успеха */
+  const SUCCESS_PAGE = `
+  <div style="width:100%;height:100%;background:#070b14;color:#e8eef9;font-family:'Segoe UI',system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden;text-align:center;">
+    <div style="height:4px;width:100%;position:absolute;top:0;background:linear-gradient(90deg,#34c98e 0%,#1f66e5 100%);"></div>
+    <div style="width:64px;height:64px;border-radius:50%;background:rgba(52,201,142,0.12);border:1px solid rgba(52,201,142,0.4);display:flex;align-items:center;justify-content:center;">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#34c98e" stroke-width="2.2"><path d="M5 12l5 5 9-10"/></svg>
+    </div>
+    <div style="font-family:'Arial Narrow',Arial,sans-serif;font-weight:800;font-size:30px;text-transform:uppercase;margin-top:18px;">Ящик создан</div>
+    <div style="color:#8fa0bf;font-size:14px;margin-top:8px;max-width:280px;">ivan.petrov@example.com<br>Открываем почту…</div>
+    <div style="margin-top:26px;width:40px;height:40px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);border-top-color:#1f66e5;animation:rp-spin 0.8s linear infinite;"></div>
+    <style>@keyframes rp-spin{to{transform:rotate(360deg)}}</style>
+  </div>`;
+
+  function initScene() {
+    /* ── Row 1: КОНТЕКСТ ПРОЕКТА ─────────────────────────── */
+    addSection(40, '01 КОНТЕКСТ ПРОЕКТА');
+
+    const r1Title = addTitle(100, 88, 'RuПочта — стартовая страница', { fontSize: 46, fontWeight: 800 });
+    const r1Desc = addText(100, below(r1Title, 14),
+      'Вход и регистрация для рупочта.рф — открытой почты команды поверх IMAP/SMTP.\nЧто: стартовая страница продукта с двумя режимами — вход и создание ящика.\nДля кого: сотрудники и новые пользователи почтового сервера.\nЗадача: войти или завести ящик за 30 секунд, без поддержки админа.',
+      { fontSize: 15, maxWidth: 540 });
+
+    const tagsY = below(r1Desc, 18);
+    const t1 = addTag(100, tagsY, 'Вход');
+    const t2 = addTag(rightOf(t1, 8), tagsY, 'Регистрация');
+    const t3 = addTag(rightOf(t2, 8), tagsY, 'Тёмная премиальная подача');
+    const t4 = addTag(rightOf(t3, 8), tagsY, 'RUST RUSSIAN DELIVERY');
+    const t5 = addTag(rightOf(t4, 8), tagsY, 'PWA · доступность');
+
+    const cardsY = below(t1, 26);
+    const c1 = addContextCard(100, cardsY, 300, null, 'Что это',
+      '<ul><li>Стартовая страница рупочта.рф</li><li>Два режима: вход и регистрация</li><li>Поверх IMAP / SMTP, без внешних сервисов</li><li>Лицензия MIT, открытый код</li></ul>');
+    const c2 = addContextCard(420, cardsY, 300, null, 'Для кого',
+      '<ul><li>Сотрудники — быстрый вход в почту</li><li>Новые пользователи — ящик без обращения к админу</li><li>Администраторы — контроль регистрации (вкл/выкл)</li></ul>');
+    const c3 = addContextCard(740, cardsY, 280, null, 'Задача продукта',
+      '<ul><li>Войти в почту за 30 секунд</li><li>Создать ящик за минуту</li><li>Дать понять: «почта у вас на сервере»</li><li>Не путать с внешними почтовыми сервисами</li></ul>');
+
+    const notesY = maxY([c1, c2, c3], 30);
+    const n1 = addNote(100, notesY, 'Дизайн-решение',
+      'Тёмная премиальная подача под 3D-ассеты RUST RUSSIAN DELIVERY: «конверт-Z» и «конверт-ракета» на чёрном фоне. Светлая тема «убила» бы ассеты — поэтому тёмный холст, хром и триколор-акценты.');
+    const n2 = addNote(rightOf(n1, 22), notesY, 'Вход из GitHub',
+      'Структура 1:1 повторяет клиент из репозитория: соцвходы (Яндекс, Яндекс Почта, VK ID, Telegram), разделитель, лейблы над полями, «Запомнить вход», TLS-футер. Не выдумано — взято из продукта.');
+
+    const flowY = maxY([n1, n2], 30);
+    const flowDiagram = addDiagram(100, flowY, 920, 130, `
+      <div style="display:flex;flex-direction:column;gap:14px;font-size:13px;">
+        <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-tertiary);">Пользовательский поток</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div style="padding:9px 16px;border-radius:9px;background:var(--surface-raised);border:1px solid var(--border-hover);font-weight:600;">Лендинг / прямая ссылка</div>
+          <div style="color:var(--accent);">→</div>
+          <div style="padding:9px 16px;border-radius:9px;background:var(--accent-dim);border:1px solid rgba(31,102,229,0.4);font-weight:600;">Вход</div>
+          <div style="color:var(--text-tertiary);">→ соцвход или email+пароль →</div>
+          <div style="padding:9px 16px;border-radius:9px;background:var(--surface-raised);border:1px solid var(--border-hover);font-weight:600;">Рабочее место (Фокус)</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div style="padding:9px 16px;border-radius:9px;background:var(--surface-raised);border:1px solid var(--border-hover);font-weight:600;">«Завести почту»</div>
+          <div style="color:var(--accent);">→</div>
+          <div style="padding:9px 16px;border-radius:9px;background:var(--accent-dim);border:1px solid rgba(31,102,229,0.4);font-weight:600;">Регистрация</div>
+          <div style="color:var(--text-tertiary);">→ имя@домен + пароль ≥10 →</div>
+          <div style="padding:9px 16px;border-radius:9px;background:var(--surface-raised);border:1px solid var(--border-hover);font-weight:600;">Ящик создан · авто-вход</div>
+        </div>
+      </div>
+    `);
+
+    /* ── Row 2: ДИЗАЙН-СИСТЕМА ─────────────────────────── */
+    const r2Start = maxY([n1, n2, flowDiagram], 90);
+    addSection(r2Start, '02 ДИЗАЙН-СИСТЕМА');
+
+    const dsTone = addText(100, r2Start + 60,
+      'Токены — из дизайн-системы продукта (tokens.json, GitHub) + тёмная адаптация.\nАкцент кобальт, сигнальный красный, чернильный фон, голубой для технических меток.\nШрифты: Arial Narrow (дисплей, заглавные) + Inter (текст) + моноширинный (метаданные).',
+      { fontSize: 14, maxWidth: 560 });
+
+    const dsY = below(dsTone, 26);
+    const colorCard = addDesignSystemCard(100, dsY, 460, null, 'color', {
+      title: 'Палитра',
+      html: `<div class="color-swatch-group" style="gap:14px;">
+        <div class="swatch-item"><div class="swatch-circle" style="background:#070b14"></div><div class="swatch-name">Фон</div><div class="swatch-hex">#070B14</div></div>
+        <div class="swatch-item"><div class="swatch-circle" style="background:#0d1526"></div><div class="swatch-name">Поверхность</div><div class="swatch-hex">#0D1526</div></div>
+        <div class="swatch-item"><div class="swatch-circle" style="background:#1f66e5"></div><div class="swatch-name">Кобальт</div><div class="swatch-hex">#1F66E5</div></div>
+        <div class="swatch-item"><div class="swatch-circle" style="background:#f04453"></div><div class="swatch-name">Сигнал</div><div class="swatch-hex">#F04453</div></div>
+        <div class="swatch-item"><div class="swatch-circle" style="background:#35b8e8"></div><div class="swatch-name">Голубой</div><div class="swatch-hex">#35B8E8</div></div>
+        <div class="swatch-item"><div class="swatch-circle" style="background:#34c98e"></div><div class="swatch-name">Успех</div><div class="swatch-hex">#34C98E</div></div>
+        <div class="swatch-item"><div class="swatch-circle" style="background:#8fa0bf"></div><div class="swatch-name">Приглушённый</div><div class="swatch-hex">#8FA0BF</div></div>
+        <div class="swatch-item"><div class="swatch-circle" style="background:#e8eef9"></div><div class="swatch-name">Текст</div><div class="swatch-hex">#E8EEF9</div></div>
+      </div>`
+    });
+
+    const typeCard = addDesignSystemCard(580, dsY, 440, null, 'typography', {
+      title: 'Типографика',
+      html: `<div class="type-sample-group">
+        <div class="type-sample-row"><span class="type-sample-meta">Дисплей<br>64px</span><span class="type-sample-text" style="font-size:36px;font-weight:800;font-family:'Arial Narrow',Arial,sans-serif;text-transform:uppercase;letter-spacing:-0.02em;">Войти в почту</span></div>
+        <div class="type-sample-row"><span class="type-sample-meta">Заголовок<br>24px</span><span class="type-sample-text" style="font-size:22px;font-weight:700;font-family:'Arial Narrow',Arial,sans-serif;">Заведите почтовый ящик</span></div>
+        <div class="type-sample-row"><span class="type-sample-meta">Текст<br>16px</span><span class="type-sample-text" style="font-size:16px;">Рабочий email или логин</span></div>
+        <div class="type-sample-row"><span class="type-sample-meta">Мета<br>11px</span><span class="type-sample-text" style="font-size:11px;font-family:var(--font-mono);letter-spacing:0.12em;text-transform:uppercase;color:var(--text-tertiary);">TLS-защищённое соединение</span></div>
+      </div>`
+    });
+
+    const compCard = addDesignSystemCard(1040, dsY, 300, null, 'components', {
+      title: 'Компоненты',
+      html: `<div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="min-height:46px;border-radius:10px;background:#1f66e5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13.5px;font-weight:650;">Войти в почту</div>
+        <div style="min-height:44px;border-radius:10px;background:#101a30;border:1px solid rgba(203,220,245,0.16);display:flex;align-items:center;padding:0 12px;color:#5f6f8f;font-size:13px;">Лейбл над полем · значение</div>
+        <div style="min-height:44px;border-radius:10px;background:#101a30;border:1px solid rgba(240,68,83,0.5);display:flex;align-items:center;padding:0 12px;font-size:13px;"><span style="color:#ff6b76;">Ошибка под полем</span></div>
+        <div style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--text-secondary);"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#1f66e5" stroke-width="2"><rect x="1" y="1" width="14" height="14" rx="3"/><path d="M4 8l3 3 5-6"/></svg>Запомнить вход</div>
+      </div>`
+    });
+
+    const noteDs = addNote(1040, below(compCard, 26), 'Правила',
+      'Кнопки ≥44px (тач-цели), фокус — кобальтовое кольцо, ошибки — красным под полем, скринридеры — aria-атрибуты. prefers-reduced-motion отключает анимации.');
+
+    /* ── Row 3: МАКЕТЫ ─────────────────────────────────── */
+    const r3Start = maxY([colorCard, typeCard, compCard, noteDs], 90);
+    addSection(r3Start, '03 МАКЕТЫ');
+
+    const pagesY = r3Start + 60;
+    addPage(100, pagesY, 390, 844, 'Вход', LOGIN_PAGE);
+
+    const arrow1 = addText(520, pagesY + 380, '← переключение вкладок →', { fontSize: 12, color: 'var(--text-tertiary)', maxWidth: 200 });
+
+    addPage(720, pagesY, 390, 844, 'Регистрация', SIGNUP_PAGE);
+
+    const arrow2 = addText(1140, pagesY + 380, 'создать ящик →', { fontSize: 12, color: 'var(--text-tertiary)', maxWidth: 200 });
+
+    addPage(1340, pagesY, 390, 844, 'Ящик создан', SUCCESS_PAGE);
+
+    const pageNote = addNote(1760, pagesY + 300, 'Статусы',
+      'Оба экрана имеют полный набор состояний: загрузка (спиннер в кнопке), ошибка (красные сообщения под полями), успех (зелёный экран «Ящик создан»), disabled-кнопка при отправке.');
+
+    /* Первоначальный вид: Row 1 целиком */
+    const r = viewport.getBoundingClientRect();
+    panX = 20;
+    panY = -20;
+    zoom = 1;
+    updateTransform();
+  }
+
+  initScene();
+})();
+</script>
+</body>
+</html>
