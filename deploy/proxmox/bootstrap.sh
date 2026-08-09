@@ -162,7 +162,13 @@ for _ in $(seq 1 60); do
   [ "$state" = "healthy" ] && break
   sleep 5
 done
-[ "${state:-}" = "healthy" ] || echo "ВНИМАНИЕ: mailserver не перешёл в healthy, смотрите docker logs mailserver" >&2
+if [ "${state:-}" != "healthy" ]; then
+  # Ниже всё опирается на работающий SMTP/IMAP, а нулевой код возврата
+  # автоматика примет за успешную установку почтового сервера, которого нет.
+  echo "mailserver не перешёл в healthy за 5 минут (состояние: ${state:-неизвестно})." >&2
+  echo "Смотрите: docker logs mailserver — и запустите bootstrap.sh снова." >&2
+  exit 1
+fi
 
 log "Ключ DKIM для $MAIL_DOMAIN"
 if ! compgen -G "$MAIL_ROOT/config/rspamd/dkim/*$MAIL_DOMAIN*" >/dev/null; then
@@ -176,12 +182,17 @@ id -u rupochta >/dev/null 2>&1 || useradd --system --home-dir "$APP_ROOT" --shel
 usermod -aG docker rupochta
 install -d -o rupochta -g rupochta -m 0750 "$STATE_DIR" "$APP_ROOT"
 
+# Каталог принадлежит rupochta, а скрипт работает от root: без safe.directory
+# git отказывается с «detected dubious ownership» и повторный запуск ломается.
+# Флаг задаётся на вызов, а не глобально в конфиге root.
+app_git() { git -c safe.directory="$APP_ROOT/app" -C "$APP_ROOT/app" "$@"; }
+
 if [ -d "$APP_ROOT/app/.git" ]; then
-  git -C "$APP_ROOT/app" fetch --depth 1 origin "$RUPOCHTA_REF"
+  app_git fetch --depth 1 origin "$RUPOCHTA_REF"
   # -B, а не `checkout FETCH_HEAD`: иначе рабочая копия остаётся в detached HEAD
   # и обещанное в README `git pull` после первого же обновления перестаёт работать.
-  git -C "$APP_ROOT/app" checkout -B "$RUPOCHTA_REF" FETCH_HEAD
-  git -C "$APP_ROOT/app" branch --set-upstream-to="origin/$RUPOCHTA_REF" \
+  app_git checkout -B "$RUPOCHTA_REF" FETCH_HEAD
+  app_git branch --set-upstream-to="origin/$RUPOCHTA_REF" \
     "$RUPOCHTA_REF" >/dev/null 2>&1 || true
 else
   git clone --depth 1 --branch "$RUPOCHTA_REF" "$RUPOCHTA_REPO" "$APP_ROOT/app"
@@ -258,11 +269,14 @@ log "Готово"
 cat <<EOF
 
 Веб-интерфейс:  https://$MAIL_FQDN
-Админ-панель:   https://$MAIL_FQDN/admin
 Ключ админ-API: grep MAIL_ADMIN_KEY $ENV_FILE
 
-Первый ящик (дальше можно из админ-панели):
+Ящики заводятся с сервера:
   docker exec -ti mailserver setup email add admin@$MAIL_DOMAIN
+
+Админ-панель $MAIL_FQDN/admin просит учётные данные LDAP/AD, и на этой
+установке войти в неё пока нельзя: задайте MAILADMIN_LDAPS_* в $ENV_FILE
+и перезапустите rupochta.
 
 DNS-записи для домена — выведет:
   MAIL_FQDN=$MAIL_FQDN MAIL_DOMAIN=$MAIL_DOMAIN $SCRIPT_DIR/dns-records.sh
