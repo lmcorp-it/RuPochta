@@ -158,6 +158,11 @@ VMID=210 MAIL_FQDN=mail.example.com IPCONFIG='ip=192.0.2.10/24,gw=192.0.2.1' \
 Дальше — по [deploy/proxmox/README.md](deploy/proxmox/README.md): установка
 внутри VM, DNS-записи (MX, SPF, DKIM, DMARC, PTR) и эксплуатация.
 
+> **Два набора скриптов, не перепутайте.** `deploy/proxmox/` — с нуля: создаёт
+> виртуальную машину и ставит в неё почтовый сервер. Корневой `deploy/` —
+> для уже существующей VM: настраивает приложение (nginx, systemd, окружение) и
+> умеет управлять гостем через API Proxmox без SSH.
+
 ### Разработка за 5 минут
 
 Локальный стенд с [Greenmail](https://greenmail-mail-test.github.io/greenmail/) —
@@ -201,7 +206,8 @@ rupochta_server.py          — ядро: аутентификация, IMAP/SMT
 rupochta_control_agent.py   — агент управления ботом
 imap_docker_proxy.py        — локальный IMAP-прокси
 rupochta-mcp-server/        — MCP-сервер для LLM-агентов (TypeScript)
-deploy/                     — systemd, nginx, скрипты установки
+deploy/                     — установка на живую VM + управление через API Proxmox
+deploy/proxmox/             — создание VM и почтового сервера с нуля
 static/                     — фронтенд (PWA), service worker
 tests/                      — python3 -m unittest discover -s tests
 DESIGN.md · tokens.json     — дизайн-токены
